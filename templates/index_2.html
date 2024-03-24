@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LIVE STREAMING</title>
+    <style>
+        a {
+            font-size: 30px;
+        }
+    </style>
+</head>
+<body>
+    <video id="remoteVideo" autoplay>
+        <source src="{{ url_for('video_feed') }}" type="video/mp4">
+    </video>
+    <a href="{{ url_for('video_feed') }}" target="_self">Link to Video Feed</a>
+    <script src="./main.js"></script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+args_config:
+  max_rate: 1.0
+  max_speed: 0.5
+  mid_rate: 0.66
+  min_rate: 0.3
+  slow_speed: 0.2
+audio_config:
+  audio_output: true
+  default_volume: 1.0
+  min_time_bewteen_play: 1
+  speed_rate: 180
+base_config:
+  main_type: 2
+  module_type: 0
+  robot_name: UGV Rover
+  sbc_version: 0.9
+  add_osd: false
+  extra_sensor: false
+  use_lidar: false
+cmd_config:
+  cmd_gimbal_base_ctrl: 141
+  cmd_gimbal_ctrl: 133
+  cmd_gimbal_steady: 137
+  cmd_movition_ctrl: 1
+  cmd_pwm_ctrl: 11
+  cmd_servo_torque: 210
+  cmd_set_servo_id: 501
+  cmd_set_servo_mid: 502
+code:
+  base_ct: 10410
+  base_of: 10407
+  base_on: 10408
+  cv_auto: 10307
+  cv_clor: 10305
+  cv_face: 10303
+  cv_moti: 10302
+  cv_none: 10301
+  cv_objs: 10304
+  head_ct: 10409
+  led_aut: 10405
+  led_off: 10404
+  led_ton: 10406
+  max_res: 10101
+  mc_lock: 10501
+  mc_unlo: 10502
+  mid_res: 10102
+  min_res: 10103
+  mp_face: 10308
+  mp_hand: 10306
+  mp_pose: 10309
+  pic_cap: 10201
+  re_capt: 10402
+  re_none: 10401
+  re_reco: 10403
+  release: 10902
+  s_panid: 10901
+  s_tilid: 10904
+  set_mid: 10903
+  vid_end: 10203
+  vid_sta: 10202
+  zoom_x1: 10104
+  zoom_x2: 10105
+  zoom_x4: 10106
+cv:
+  aimed_error: 8
+  color_lower:
+  - 101
+  - 50
+  - 38
+  color_upper:
+  - 110
+  - 255
+  - 255
+  default_color: bluexxx
+  min_radius: 12
+  sampling_rad: 25
+  track_acc_rate: 0.4
+  track_color_iterate: 0.023
+  track_faces_iterate: 0.045
+  track_spd_rate: 60
+fb:
+  base_light: 115
+  base_voltage: 112
+  cpu_load: 106
+  cpu_temp: 107
+  cv_movtion_mode: 114
+  detect_react: 103
+  detect_type: 101
+  led_mode: 102
+  pan_angle: 109
+  picture_size: 104
+  ram_usage: 108
+  tilt_angle: 110
+  video_fps: 113
+  video_size: 105
+  wifi_rssi: 111
+sbc_config:
+  disabled_http_log: true
+  feedback_interval: 0.001
+video:
+  default_quality: 20
+  default_res_h: 480
+  default_res_w: 640

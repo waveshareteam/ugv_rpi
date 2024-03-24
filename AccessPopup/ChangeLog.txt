@@ -1,0 +1,28 @@
+installconfig.sh
+	ver 0.8-4 28 Jan 2024
+		Added additional error checking and messages
+	ver 0.8-3 20 Jan 2024
+		Cleaned up option 5 so the SSID list doesn't include hidden ssid entries
+	ver 0.8-2 14 Jan 2024
+		Added support for Ubuntu Raspberry Pi Image
+		OS Compatability message fixed. It was removed before it could be read.
+	ver 0.8-1 13 Dec 2023
+		fixed IP message errored when blank.
+	ver 0.8 08 Dec 2023:
+		Initial Release
+
+
+
+accesspopup
+	ver 0.8-3 23 Jan 2024
+		Changed connection checks with NMCLI to use exit status instead of text output.
+		The Priority of the NM profile is used when choosing a valid network in range. Highest first.
+	ver 0.8-2 20 Jan 2024
+		Fixed SSID's with spaces where handled until the profile activation, then caused profile to be unknown
+		cleaned up output text and messages
+		added more error handeling 
+	ver 0.8-1 12 Jan 2024
+		typo in active_wifi function caused if statment to always be true. So always checked rather when just when required
+	ver 0.8 11 Dec 2023
+		Initial Release
+
