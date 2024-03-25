@@ -6,9 +6,14 @@ import threading
 import datetime, time
 import numpy as np
 import math
-import yaml, os, json
+import yaml, os, json, subprocess
 from collections import deque
 import textwrap
+
+# libraries for csi camera
+from picamera2 import Picamera2
+from picamera2.encoders import H264Encoder, Encoder
+from picamera2.outputs import FfmpegOutput
 
 # config file.
 curpath = os.path.realpath(__file__)
@@ -21,9 +26,6 @@ class OpencvFuncs():
     """docstring for OpencvFuncs"""
     def __init__(self, project_path, base_ctrl):
         self.base_ctrl = base_ctrl
-        self.camera = cv2.VideoCapture(0)
-        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, f['video']['default_res_w'])
-        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, f['video']['default_res_h'])
         self.cv_event = threading.Event()
         self.cv_event.clear()
         self.cv_mode = f['code']['cv_none']
@@ -141,20 +143,41 @@ class OpencvFuncs():
         # osd settings
         self.add_osd = f['base_config']['add_osd']
 
+        # camera type detection
+        self.usb_camera_connected = self.usb_camera_detection()
+
+        # usb camera init
+        if self.usb_camera_connected:
+            self.camera = cv2.VideoCapture(0)
+            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, f['video']['default_res_w'])
+            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, f['video']['default_res_h'])
+
+        # csi camera init
+        if not self.usb_camera_connected:
+            print("init csi camera.")
+            self.encoder = H264Encoder(1000000)
+            self.picam2 = Picamera2()
+            self.picam2.configure(self.picam2.create_video_configuration(main={"format": 'XRGB8888', "size": (f['video']['default_res_w'], f['video']['default_res_h'])}))
+            self.picam2.start()
+
+
 
     def frame_process(self):
         try:
-            success, input_frame = self.camera.read()
-            if not success:
-                self.camera.release()
-                time.sleep(1)
-                self.camera = cv2.VideoCapture(0)
+            if self.usb_camera_connected:
+                success, input_frame = self.camera.read()
+                if not success:
+                    self.camera.release()
+                    time.sleep(1)
+                    self.camera = cv2.VideoCapture(0)
+            else:
+                input_frame = self.picam2.capture_array()
         except Exception as e:
             print(f"[cv_ctrl.frame_process] error: {e}")
             input_frame = 255 * np.ones((480, 640, 3), dtype=np.uint8)
             cv2.putText(input_frame, f"camera read failed... \n{e}", 
                         (round(0.05*640), round(0.1*640 + 5 * 13)), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.369, (255, 255, 255), 1)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.369, (0, 0, 0), 1)
             ret, buffer = cv2.imencode('.jpg', input_frame, [int(cv2.IMWRITE_JPEG_QUALITY), self.video_quality])
             input_frame = buffer.tobytes()
             return input_frame
@@ -250,6 +273,16 @@ class OpencvFuncs():
         # output frame
         return input_frame
 
+
+
+    def usb_camera_detection(self):
+        lsusb_output = subprocess.check_output(["lsusb"]).decode("utf-8")
+        if "Camera" in lsusb_output:
+            print("USB Camera connected")
+            return True
+        else:
+            print("USB Camera not connected")
+            return False
 
 
     def osd_render(self, osd_frame):
