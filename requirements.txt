@@ -116,7 +116,7 @@ pandocfilters==1.5.0
 parso==0.8.3
 pexpect==4.8.0
 pgzero==1.2
-picamera2==0.3.14
+picamera2==0.3.17
 pidng==4.0.9
 piexif==1.1.3
 pigpio==1.78
