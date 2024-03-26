@@ -592,8 +592,11 @@ if __name__ == "__main__":
     # update the size of videos and pictures
     si.update_folder(thisPath)
 
-    # pt looks forward
-    base.gimbal_ctrl(0, 0, 200, 10)
+    # pt/arm looks forward
+    if f['base_config']['module_type'] == 1:
+        base.base_json_ctrl({"T":f['cmd_config']['cmd_arm_ctrl_ui'],"E":f['args_config']['arm_default_e'],"Z":f['args_config']['arm_default_z'],"R":f['args_config']['arm_default_r']})
+    else:
+        base.gimbal_ctrl(0, 0, 200, 10)
 
     # feedback loop starts
     si.start()

@@ -1,9 +1,12 @@
 args_config:
+  arm_default_e: 60
+  arm_default_r: 0
+  arm_default_z: 24
   max_rate: 1.0
-  max_speed: 0.65
+  max_speed: 0.5
   mid_rate: 0.66
   min_rate: 0.3
-  slow_speed: 0.3
+  slow_speed: 0.2
 audio_config:
   audio_output: true
   default_volume: 1.0
@@ -12,12 +15,13 @@ audio_config:
 base_config:
   add_osd: false
   extra_sensor: false
-  main_type: 1
-  module_type: 2
-  robot_name: RaspRover
+  main_type: 3
+  module_type: 1
+  robot_name: UGV Beast
   sbc_version: 0.9
   use_lidar: false
 cmd_config:
+  cmd_arm_ctrl_ui: 144
   cmd_gimbal_base_ctrl: 141
   cmd_gimbal_ctrl: 133
   cmd_gimbal_steady: 137

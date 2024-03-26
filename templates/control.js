@@ -1,6 +1,6 @@
 var robot_name, cmd_movition_ctrl, max_speed, slow_speed;
-var cmd_gimbal_ctrl, cmd_gimbal_steady;
-var max_rate, mid_rate, min_rate;
+var cmd_gimbal_ctrl, cmd_gimbal_steady, cmd_arm_ctrl_ui;
+var max_rate, mid_rate, min_rate, arm_default_e, arm_default_r, arm_default_z; 
 var max_res, mid_res, min_res; 
 var zoom_x1, zoom_x2, zoom_x4;
 var pic_cap, vid_sta, vid_end;
@@ -10,6 +10,7 @@ var mp_face, mp_pose;
 var re_none, re_capt, re_reco, led_off, led_aut, led_ton, base_of, base_on;
 var head_ct, base_ct;
 var s_panid, release, set_mid, s_tilid;
+var armZ, armR, armE;
 
 var detect_type, led_mode, detect_react, picture_size, video_size, cpu_load;
 var cpu_temp, ram_usage, pan_angle, tilt_angle, wifi_rssi, base_voltage, video_fps;
@@ -20,10 +21,11 @@ fetch('/config')
   .then(yamlText => {
     try {
       const yamlObject = jsyaml.load(yamlText);
-      console.log(yamlObject); // YAML 文件现在被转换成了 JavaScript 对象
+      console.log(yamlObject);
       cmd_movition_ctrl = yamlObject.cmd_config.cmd_movition_ctrl;
       cmd_gimbal_steady = yamlObject.cmd_config.cmd_gimbal_steady;
       cmd_gimbal_ctrl = yamlObject.cmd_config.cmd_gimbal_ctrl;
+      cmd_arm_ctrl_ui = yamlObject.cmd_config.cmd_arm_ctrl_ui;
 
       max_speed = yamlObject.args_config.max_speed;
       slow_speed = yamlObject.args_config.slow_speed;
@@ -32,6 +34,15 @@ fetch('/config')
       max_rate  = yamlObject.args_config.max_rate;
       mid_rate  = yamlObject.args_config.mid_rate;
       min_rate  = yamlObject.args_config.min_rate;
+      arm_default_e = yamlObject.args_config.arm_default_e;
+      arm_default_z = yamlObject.args_config.arm_default_z;
+      arm_default_r = yamlObject.args_config.arm_default_r;
+      armZ = arm_default_z; 
+      armR = arm_default_r;
+      armE = arm_default_e;
+
+      main_type = yamlObject.base_config.main_type;
+      module_type = yamlObject.base_config.module_type;
 
       max_res = yamlObject.code.max_res;
       mid_res = yamlObject.code.mid_res;
@@ -430,34 +441,85 @@ function moveStick(event) {
 }
 
 
-function joyStickCtrl(inputX, inputY) {
-    if (steady_mode == true) {
-        inputX = 0;
-    }
-    var x_cmd = Math.max(-180, Math.min(inputX/2.5, 180));
-    var y_cmd = Math.max(-30, Math.min(-inputY/2.5, 90));
+function pointInCircle(radius, x, y) {
+    var distance = Math.sqrt(x * x + y * y);
 
-    if (steady_mode == false) {
-        cmdJsonCmd({"T":cmd_gimbal_ctrl,"X":inputX/2.5,"Y":-inputY/2.5,"SPD":0,"ACC":128});
+    if (distance <= radius) {
+        return { x: x, y: y };
     } else {
-        steadyCtrl(1, inputY);
+        var angle = Math.atan2(y, x);
+        var newX = radius * Math.cos(angle);
+        var newY = radius * Math.sin(angle);
+        return { x: newX, y: newY };
     }
+}
+document.addEventListener('mousewheel', (e) => {
+    if (isDragging && isEnlarged) {
+        var delta = e.deltaY || e.detail || e.wheelDelta;
+        e.preventDefault();
+        if (delta > 0) {
+            // console.log("down");
+            armE = armE - 5;
+            if (armE < 60) {
+                armE = 60;
+            }
+        } else {
+            // console.log("up");
+            armE = armE + 5;
+            if (armE > 450) {
+                armE = 450;
+            }
+        }
+        // cmdSend(145, stickExtend, 0);
+        var armLimit = pointInCircle(510, armE, armZ);
+        armE = armLimit.x;
+        armZ = armLimit.y;
+        cmdJsonCmd({"T":cmd_arm_ctrl_ui,"E":armE,"Z":armZ,"R":armR});
+    }
+}, { passive: false });
+function joyStickCtrl(inputX, inputY) {
+    if (module_type == 1) {
+        var x_cmd = Math.max(-180, Math.min(inputX/7, 180));
+        console.log(inputY);
+        // cmdSend(144, -inputX/7, -inputY/2);
+        var armLimit = pointInCircle(510, armE, -inputY/2);
+        armE = armLimit.x;
+        armZ = armLimit.y;
+        armR = -inputX/7;
+        cmdJsonCmd({"T":cmd_arm_ctrl_ui,"E":armE,"Z":armZ,"R":armR});
 
-    RotateAngle = document.getElementById("Pan").innerHTML = x_cmd.toFixed(2);
-    var panScale = document.getElementById("pan_scale");
-    panScale.style.transform = `rotate(${-RotateAngle}deg)`;
+        RotateAngle = document.getElementById("Pan").innerHTML = x_cmd.toFixed(2);
+        var panScale = document.getElementById("pan_scale");
+        panScale.style.transform = `rotate(${-RotateAngle}deg)`;
+    } else {
+        if (steady_mode == true) {
+            inputX = 0;
+        }
+        var x_cmd = Math.max(-180, Math.min(inputX/2.5, 180));
+        var y_cmd = Math.max(-30, Math.min(-inputY/2.5, 90));
 
-    var tiltNum = document.getElementById("Tilt");
-    var tiltNumPanel = tiltNum.getBoundingClientRect();
-    var tiltNumMove = tiltNum.innerHTML = y_cmd.toFixed(2);;
+        if (steady_mode == false) {
+            cmdJsonCmd({"T":cmd_gimbal_ctrl,"X":inputX/2.5,"Y":-inputY/2.5,"SPD":0,"ACC":128});
+        } else {
+            steadyCtrl(1, inputY);
+        }
 
-    var pointer = document.getElementById('tilt_scale_pointer');
-    var tiltScaleOut = document.getElementById('tilt_scale');
-    var tiltScaleBase = tiltScaleOut.getBoundingClientRect();
-    var tiltScalediv = document.getElementById('tilt_scalediv');
-    var tiltScaleDivBase = tiltScalediv.getBoundingClientRect();
-    var pointerMoveY = tiltScaleBase.height/135;
-    pointer.style.transform = `translate(${tiltScaleDivBase.width}px, ${pointerMoveY*(90 - tiltNumMove)-tiltNumPanel.height/2}px)`;
+        RotateAngle = document.getElementById("Pan").innerHTML = x_cmd.toFixed(2);
+        var panScale = document.getElementById("pan_scale");
+        panScale.style.transform = `rotate(${-RotateAngle}deg)`;
+
+        var tiltNum = document.getElementById("Tilt");
+        var tiltNumPanel = tiltNum.getBoundingClientRect();
+        var tiltNumMove = tiltNum.innerHTML = y_cmd.toFixed(2);;
+
+        var pointer = document.getElementById('tilt_scale_pointer');
+        var tiltScaleOut = document.getElementById('tilt_scale');
+        var tiltScaleBase = tiltScaleOut.getBoundingClientRect();
+        var tiltScalediv = document.getElementById('tilt_scalediv');
+        var tiltScaleDivBase = tiltScalediv.getBoundingClientRect();
+        var pointerMoveY = tiltScaleBase.height/135;
+        pointer.style.transform = `translate(${tiltScaleDivBase.width}px, ${pointerMoveY*(90 - tiltNumMove)-tiltNumPanel.height/2}px)`;
+    }
 }
 
 
@@ -824,6 +886,7 @@ var keyMap = {
     82: 'r',
     69: 'e',
     70: 'f',
+    71: 'g',
     72: 'h',
     73: 'i',
     75: 'k',
@@ -831,6 +894,7 @@ var keyMap = {
     74: 'j',
     76: 'l',
     79: 'o',
+    84: 't',
     85: 'u'
 };
 
@@ -839,6 +903,7 @@ var ctrl_buttons = {
     r: 0,
     e: 0,
     f: 0,
+    g: 0,
     h: 0,
     i: 0,
     k: 0,
@@ -846,6 +911,7 @@ var ctrl_buttons = {
     j: 0,
     l: 0,
     o: 0,
+    t: 0,
     u: 0
 };
 
@@ -898,13 +964,17 @@ function cmdProcess() {
         joyStickCtrl(0, 0);
     }
 
-    // Gimbal Steady Ctrl
+    // Gimbal/Arm Steady Ctrl
     if (ctrl_buttons.u == 1){
         steadyCtrl(0, stickSendY);
     } else if (ctrl_buttons.o == 1){
         steadyCtrl(1, stickSendY);
     } else if (ctrl_buttons.c == 1){
         lookAhead();
+    } else if (ctrl_buttons.g == 1){
+        cmdJsonCmd({"T":106,"cmd":3.14,"spd":0,"acc":0});
+    } else if (ctrl_buttons.t == 1){
+        cmdJsonCmd({"T":106,"cmd":1.57,"spd":0,"acc":0});
     }
 }
 
@@ -939,11 +1009,25 @@ document.onkeyup = function (event) {
 }
 
 function lookAhead() {
-    stickLastX = 0;
-    stickLastY = 0;
-    stickSendX = 0;
-    stickSendY = 0;
-    joyStickCtrl(0, 0);
+    if (module_type == 1) {
+        armZ = arm_default_z; 
+        armR = arm_default_r;
+        armE = arm_default_e;
+        stickLastX = 0;
+        stickLastY = -arm_default_z;
+        stickSendX = 0;
+        stickSendY = -arm_default_z;
+        cmdJsonCmd({"T":cmd_arm_ctrl_ui,"E":armE,"Z":armZ,"R":armR});
+    } else {
+        armZ = arm_default_z; 
+        armR = arm_default_r;
+        armE = arm_default_e;
+        stickLastX = 0;
+        stickLastY = 0;
+        stickSendX = 0;
+        stickSendY = 0;
+        joyStickCtrl(0, 0);
+    }
 }
 
 document.getElementById('sendButton').addEventListener('click', function() {
@@ -1141,54 +1225,6 @@ function readGamepad() {
         last_gp_pt_x = gp_pt_x;
         last_gp_pt_y = gp_pt_y;
       }
-
-
-      // var change_x = gp.axes[2];
-      // if(Math.abs(change_x) < 0.01){
-      //   change_x = 0;
-      // }
-      // var change_y = gp.axes[3];
-      // if(Math.abs(change_y) < 0.01){
-      //   change_y = 0;
-      // }
-      // gp_pt_x = gp_pt_x + change_x * gp_pt_speed;
-      // gp_pt_x = Math.max(-180, Math.min(gp_pt_x, 180));
-      // gp_pt_y = gp_pt_y - change_y * gp_pt_speed;
-      // gp_pt_y = Math.max(-30, Math.min(gp_pt_y, 90));
-
-      // if(gp_pt_x != last_gp_pt_x || gp_pt_y != last_gp_pt_y){
-      //   cmdJsonCmd({"T":cmd_gimbal_ctrl,"X":gp_pt_x,"Y":gp_pt_y,"SPD":0,"ACC":32});
-      //   last_gp_pt_x = gp_pt_x;
-      //   last_gp_pt_y = gp_pt_y;
-
-      //   RotateAngle = document.getElementById("Pan").innerHTML = gp_pt_x.toFixed(2);
-      //   var panScale = document.getElementById("pan_scale");
-      //   panScale.style.transform = `rotate(${-RotateAngle}deg)`;
-
-      //   var tiltNum = document.getElementById("Tilt");
-      //   var tiltNumPanel = tiltNum.getBoundingClientRect();
-      //   var tiltNumMove = tiltNum.innerHTML = gp_pt_y.toFixed(2);;
-
-      //   var pointer = document.getElementById('tilt_scale_pointer');
-      //   var tiltScaleOut = document.getElementById('tilt_scale');
-      //   var tiltScaleBase = tiltScaleOut.getBoundingClientRect();
-      //   var tiltScalediv = document.getElementById('tilt_scalediv');
-      //   var tiltScaleDivBase = tiltScalediv.getBoundingClientRect();
-      //   var pointerMoveY = tiltScaleBase.height/135;
-      //   pointer.style.transform = `translate(${tiltScaleDivBase.width}px, ${pointerMoveY*(90 - tiltNumMove)-tiltNumPanel.height/2}px)`;
-
-      // }
-
-      // if(last_gp_lt1 != gp.buttons[4].pressed){
-      //   last_gp_lt1 = gp.buttons[4].pressed;
-      //   cmdSend(led_ton, 0, 0);
-      // }
-
-      // if(last_gp_lt2 != gp.buttons[6].pressed){
-      //   last_gp_lt2 = gp.buttons[6].pressed;
-      //   cmdSend(led_off, 0, 0);
-      // }
-
     }
   }
   window.requestAnimationFrame(readGamepad);
@@ -1261,57 +1297,6 @@ function updateAudioFileList() {
     })
     .catch(error => console.error('Error:', error));
 }
-
-
-// // audio drag & play
-// updateAudioFileList();
-// var audioFilesElement = document.getElementById('audioFiles');
-
-// // 拖拽事件监听
-// audioFilesElement.addEventListener('dragover', function(event) {
-//   event.preventDefault(); // 阻止默认行为
-// });
-
-// audioFilesElement.addEventListener('drop', function(event) {
-//   event.preventDefault(); // 阻止默认行为
-//   var files = event.dataTransfer.files; // 获取拖拽的文件
-//   uploadFiles(files); // 调用上传函数
-// });
-// function updateAudioFileList() {
-//     fetch('/getAudioFiles')
-//       .then(response => response.json())
-//       .then(files => {
-//         var audioFilesElement = document.getElementById('audioFiles');
-//         audioFilesElement.innerHTML = ''; // 清空当前列表
-  
-//         files.forEach(file => {
-//           var fileElement = document.createElement('div');
-//           fileElement.className = 'audio-file';
-//           fileElement.textContent = file;
-//           fileElement.setAttribute('data-file-path', file);
-  
-//           // 添加双击播放事件
-//           fileElement.addEventListener('click', function() {
-//               var filePath = fileElement.getAttribute('data-file-path');
-//               fetch('/playAudio', {
-//                 method: 'POST',
-//                 headers: {
-//                   'Content-Type': 'application/x-www-form-urlencoded',
-//                 },
-//                 body: 'audio_file=' + encodeURIComponent(filePath)
-//               })
-//               .then(response => response.json())
-//               .then(data => {
-//                 console.log('Audio is playing');
-//               })
-//               .catch(error => console.error('Error:', error));
-//           });
-  
-//           audioFilesElement.appendChild(fileElement);
-//         });
-//       })
-//       .catch(error => console.error('Error:', error));
-//   }
   
 // 文件上传函数
 function uploadFiles(files) {
