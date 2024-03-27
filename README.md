@@ -75,7 +75,7 @@ After powering on the robot, the Raspberry Pi will automatically create a hotspo
 - The first line `E:` is the IP address of the Ethernet port for remotely accessing the Raspberry Pi. `No Ethernet` means that the Raspberry Pi has no Ethernet cable connection.
 - The second line `W:` In AP mode, the robot will automatically establish a hotspot and display the default `IP: 192.168.50.5`. In STA mode, the Raspberry Pi will connect to a known WiFi network and display the IP address for remote access.
 - The third line `F/J` Ethernet port number, `5000` is for accessing the robot control Web UI, and `8888` is for accessing the JupyterLab interface.
-- The fourth line `AP` means the WIFI is in AP mode, and the time means the usage period of the robot, the value in dBm represents the signal strength RSSI in STA mode.  
+- The fourth line `STA` means the WIFI is in STA mode, and the time means the usage period of the robot, the value in dBm represents the signal strength RSSI in STA mode.  
 
 You can use a mobile phone or PC to access this robot web app. You can open the browser, and enter `[IP]:5000`(`192.168.10.50:5000` for example) in the URL bar to access and control the robot.
 You can use `[IP]:8888`(`192.168.10.50:8888` for example) to access JupyterLab.
