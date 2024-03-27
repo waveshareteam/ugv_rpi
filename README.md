@@ -83,7 +83,7 @@ If there is not a knowing WiFi for robot to connect, the robot will set up a hot
 
 # License
 ugv_rpi for the Raspberry Pi: an open source robotics platform for the Raspberry Pi.
-Copyright (C) 2024 ![Waveshare](https://www.waveshare.com/)
+Copyright (C) 2024 [Waveshare](https://www.waveshare.com/)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
