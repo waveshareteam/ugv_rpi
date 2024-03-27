@@ -31,7 +31,7 @@ The upper computer sends JSON commands to lower computer(the driver of the robot
 - Photo taking
 - Video Recording
 
-## Tutorial
+## Quick Install
 You need to install Raspberry Pi on your robot if you are using **WAVE ROVER**, **UGV01** or **UGV02**.  
 
 This app is already installed in the SD card of **UGV Rover**, **UGV Beast** and **RaspRover**.  
