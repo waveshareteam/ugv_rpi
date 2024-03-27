@@ -47,7 +47,7 @@ You can clone this repository from Waveshare's GitHub to your local machine.
 
     git clone https://github.com/waveshare/ugv_rpi.git
     
-You can also clone this repository from my GitHub to your local machine.
+Or you can also clone this repository from my GitHub to your local machine.
 
     git clone https://github.com/effectsmachine/ugv_rpi.git
     
