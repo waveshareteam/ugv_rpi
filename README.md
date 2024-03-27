@@ -4,6 +4,7 @@
 
 # Waveshare UGV Robots
 This is a Raspberry Pi example for the [Waveshare](https://www.waveshare.com/) UGV robots: **WAVE ROVER**, **UGV Rover**, **UGV Beast**, **RaspRover**, **UGV01**, **UGV02**.  
+
 ![](./media/UGV-Rover-details-23.jpg)
 
 ## Basic Description
@@ -68,7 +69,8 @@ You can also clone this repository from my GitHub to your local machine.
 ### Reboot Device
     sudo reboot
 
-After powering on the robot, the Raspberry Pi will automatically create a hotspot, and the LED screen will display a series of system initialization messages:
+After powering on the robot, the Raspberry Pi will automatically create a hotspot, and the LED screen will display a series of system initialization messages:  
+
 ![](./media/RaspRover-LED-screen.png)
 - The first line `E:` is the IP address of the Ethernet port for remotely accessing the Raspberry Pi. `No Ethernet` means that the Raspberry Pi has no Ethernet cable connection.
 - The second line `W:` In AP mode, the robot will automatically establish a hotspot and display the default `IP: 192.168.50.5`. In STA mode, the Raspberry Pi will connect to a known WiFi network and display the IP address for remote access.
