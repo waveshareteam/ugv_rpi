@@ -32,19 +32,30 @@ The upper computer sends JSON commands to lower computer(the driver of the robot
 
 ## Tutorial
 You need to install Raspberry Pi on your robot if you are using **WAVE ROVER**, **UGV01** or **UGV02**.  
+
 This app is already installed in the SD card of **UGV Rover**, **UGV Beast** and **RaspRover**.  
+
 You can use this tutorial to upgrade your robot's upper computer program.  
+
 You can use this tutorial to install this program on a pure Raspberry Pi OS.  
 
+
 - Download the repo from github
+
 You can clone this repository from Waveshare's GitHub to your local machine.
+
     git clone https://github.com/waveshare/ugv_rpi.git
+    
 You can also clone this repository from my GitHub to your local machine.
+
     git clone https://github.com/effectsmachine/ugv_rpi.git
+    
 - Grant execution permission to the installation script
+'''
     cd ugv_rpi/
     sudo chmod +x setup.sh
     sudo chmod +x autorun.sh
+''' 
 - Install app (it'll take a while before finish)
     sudo ./setup.sh
 - Autorun setup
