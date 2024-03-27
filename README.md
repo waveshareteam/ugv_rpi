@@ -3,12 +3,12 @@
 ![GitHub repo size](https://img.shields.io/github/repo-size/effectsmachine/ugv_rpi) ![GitHub](https://img.shields.io/github/license/effectsmachine/ugv_rpi) ![GitHub last commit](https://img.shields.io/github/last-commit/effectsmachine/ugv_rpi)
 
 # Waveshare UGV Robots
-This is a Raspberry Pi example for the ![Waveshare](https://www.waveshare.com/) UGV robots: **WAVE ROVER**, **UGV Rover**, **UGV Beast**, **RaspRover**, **UGV01**, **UGV02**.  
+This is a Raspberry Pi example for the [Waveshare](https://www.waveshare.com/) UGV robots: **WAVE ROVER**, **UGV Rover**, **UGV Beast**, **RaspRover**, **UGV01**, **UGV02**.  
 ![](./media/UGV-Rover-details-23.jpg)
 
 ## Basic Description
 The Waveshare UGV robots uses a upper computer and a lower computer.This repo is the program running in the upper computer, Raspberry Pi in this case.  
-The program running in lower computer are named ![ugv_base_ros](https://github.com/effectsmachine/ugv_base_ros.git) or ![ugv_base_general](https://github.com/effectsmachine/ugv_base_general.git), depending on the type of the robot driver you are using.  
+The program running in lower computer are named [ugv_base_ros](https://github.com/effectsmachine/ugv_base_ros.git) or [ugv_base_general](https://github.com/effectsmachine/ugv_base_general.git), depending on the type of the robot driver you are using.  
 The upper computer sends JSON commands to lower computer(the driver of the robots based on ESP32) via GPIO uart. The Host Controller Adopts Raspberry Pi For AI Vision And Strategy Planning, And The Sub Controller Uses ESP32 For Motion Control And Sensor Data Processing, providing efficient collaboration and upgraded performance.
 
 ## Features
@@ -40,7 +40,7 @@ You can use this tutorial to upgrade your robot's upper computer program.
 You can use this tutorial to install this program on a pure Raspberry Pi OS.  
 
 
-- Download the repo from github
+### Download the repo from github
 
 You can clone this repository from Waveshare's GitHub to your local machine.
 
@@ -50,24 +50,22 @@ You can also clone this repository from my GitHub to your local machine.
 
     git clone https://github.com/effectsmachine/ugv_rpi.git
     
-- Grant execution permission to the installation script
-'''
+### Grant execution permission to the installation script
     cd ugv_rpi/
     sudo chmod +x setup.sh
     sudo chmod +x autorun.sh
-''' 
-- Install app (it'll take a while before finish)
+### Install app (it'll take a while before finish)
     sudo ./setup.sh
-- Autorun setup
+### Autorun setup
     ./autorun.sh
-- AccessPopup installation
+### AccessPopup installation
     cd AccessPopup
     sudo chmod +x installconfig.sh
     sudo ./installconfig.sh
     *Input 1: Install AccessPopup
     *Press any key to exit
     *Input 9: Exit installconfig.sh
-- Reboot Device
+### Reboot Device
     sudo reboot
 
 After powering on the robot, the Raspberry Pi will automatically create a hotspot, and the LED screen will display a series of system initialization messages:
