@@ -1,10 +1,10 @@
-![Profile views](https://gpvc.arturio.dev/BEPb) ![GitHub top language](https://img.shields.io/github/languages/top/BEPb/README) ![GitHub language count](https://img.shields.io/github/languages/count/BEPb/README)
-![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/BEPb/README)
-![GitHub repo size](https://img.shields.io/github/repo-size/BEPb/README) ![GitHub](https://img.shields.io/github/license/BEPb/README) ![GitHub last commit](https://img.shields.io/github/last-commit/BEPb/README)
+![Profile views](https://gpvc.arturio.dev/effectsmachine) ![GitHub top language](https://img.shields.io/github/languages/top/effectsmachine/ugv_rpi) ![GitHub language count](https://img.shields.io/github/languages/count/effectsmachine/ugv_rpi)
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/effectsmachine/ugv_rpi)
+![GitHub repo size](https://img.shields.io/github/repo-size/effectsmachine/ugv_rpi) ![GitHub](https://img.shields.io/github/license/effectsmachine/ugv_rpi) ![GitHub last commit](https://img.shields.io/github/last-commit/effectsmachine/ugv_rpi)
 
-![GitHub User's stars](https://img.shields.io/github/stars/BEPb?style=social)
+![GitHub User's stars](https://img.shields.io/github/stars/effectsmachine?style=social)
 <p align="left">
-<img src="https://visitor-badge.laobi.icu/badge?page_id=BEPb.README" alt="visitors"/>
+<img src="https://visitor-badge.laobi.icu/badge?page_id=effectsmachine.ugv_rpi" alt="visitors"/>
 </p>
 
 # ugv_rpi
