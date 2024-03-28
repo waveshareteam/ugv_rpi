@@ -15,9 +15,9 @@ audio_config:
 base_config:
   add_osd: false
   extra_sensor: false
-  main_type: 3
-  module_type: 1
-  robot_name: UGV Beast
+  main_type: 2
+  module_type: 0
+  robot_name: UGV Rover
   sbc_version: 0.9
   use_lidar: false
 cmd_config:
