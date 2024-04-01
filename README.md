@@ -45,11 +45,7 @@ You can use this tutorial to install this program on a pure Raspberry Pi OS.
 
 You can clone this repository from Waveshare's GitHub to your local machine.
 
-    git clone https://github.com/waveshare/ugv_rpi.git
-    
-Or you can also clone this repository from my GitHub to your local machine.
-
-    git clone https://github.com/effectsmachine/ugv_rpi.git
+    git clone https://github.com/waveshareteam/ugv_rpi.git
     
 ### Grant execution permission to the installation script
     cd ugv_rpi/
