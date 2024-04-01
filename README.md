@@ -8,9 +8,11 @@ This is a Raspberry Pi example for the [Waveshare](https://www.waveshare.com/) U
 ![](./media/UGV-Rover-details-23.jpg)
 
 ## Basic Description
-The Waveshare UGV robots uses a upper computer and a lower computer.This repo is the program running in the upper computer, Raspberry Pi in this case.  
-The program running in lower computer are named [ugv_base_ros](https://github.com/effectsmachine/ugv_base_ros.git) or [ugv_base_general](https://github.com/effectsmachine/ugv_base_general.git), depending on the type of the robot driver you are using.  
-The upper computer sends JSON commands to lower computer(the driver of the robots based on ESP32) via GPIO uart. The Host Controller Adopts Raspberry Pi For AI Vision And Strategy Planning, And The Sub Controller Uses ESP32 For Motion Control And Sensor Data Processing, providing efficient collaboration and upgraded performance.
+The Waveshare UGV robots utilize both an upper computer and a lower computer. This repository contains the program running on the upper computer, which is typically a Raspberry Pi in this setup.  
+
+The program running on the lower computer is either named [ugv_base_ros](https://github.com/effectsmachine/ugv_base_ros.git) or [ugv_base_general](https://github.com/effectsmachine/ugv_base_general.git) depending on the type of robot driver being used.  
+
+The upper computer communicates with the lower computer (the robot's driver based on ESP32) by sending JSON commands via GPIO UART. The host controller, which employs a Raspberry Pi, handles AI vision and strategy planning, while the sub-controller, utilizing an ESP32, manages motion control and sensor data processing. This setup ensures efficient collaboration and enhanced performance.
 
 ## Features
 - Real-time video based on WebRTC
@@ -65,17 +67,26 @@ You can clone this repository from Waveshare's GitHub to your local machine.
 ### Reboot Device
     sudo reboot
 
-After powering on the robot, the Raspberry Pi will automatically create a hotspot, and the LED screen will display a series of system initialization messages:  
+After powering on the robot, the Raspberry Pi will automatically establish a hotspot, and the LED screen will display a series of system initialization messages:  
 
 ![](./media/RaspRover-LED-screen.png)
-- The first line `E:` is the IP address of the Ethernet port for remotely accessing the Raspberry Pi. `No Ethernet` means that the Raspberry Pi has no Ethernet cable connection.
-- The second line `W:` In AP mode, the robot will automatically establish a hotspot and display the default `IP: 192.168.50.5`. In STA mode, the Raspberry Pi will connect to a known WiFi network and display the IP address for remote access.
-- The third line `F/J` Ethernet port number, `5000` is for accessing the robot control Web UI, and `8888` is for accessing the JupyterLab interface.
-- The fourth line `STA` means the WIFI is in STA mode, and the time means the usage period of the robot, the value in dBm represents the signal strength RSSI in STA mode.  
+- The first line `E` displays the IP address of the Ethernet port, which allows remote access to the Raspberry Pi. If it shows No Ethernet, it indicates that the Raspberry Pi is not connected to an Ethernet cable.
+- The second line `W` indicates the robot's wireless mode. In Access Point (AP) mode, the robot automatically sets up a hotspot with the default IP address `192.168.50.5`. In Station (STA) mode, the Raspberry Pi connects to a known WiFi network and displays the IP address for remote access.
+- The third line `F/J` specifies the Ethernet port numbers. Port `5000` provides access to the robot control Web UI, while port `8888` grants access to the JupyterLab interface.
+- The fourth line `STA` indicates that the WiFi is in Station (STA) mode. The time value represents the duration of robot usage. The dBm value indicates the signal strength RSSI in STA mode.  
 
-You can use a mobile phone or PC to access this robot web app. You can open the browser, and enter `[IP]:5000`(`192.168.10.50:5000` for example) in the URL bar to access and control the robot.
-You can use `[IP]:8888`(`192.168.10.50:8888` for example) to access JupyterLab.
-If there is not a knowing WiFi for robot to connect, the robot will set up a hotspot automatically. You can use a mobile phone or PC to access this hotspot, the name of the hotspot is AccessPopup, and the password of the hotspot is `1234567890`. After connecting, open the browser, and enter `192.168.50.5:5000` in the URL bar to access and control the robot.
+
+You can access the robot web app using a mobile phone or PC. Simply open your browser and enter `[IP]:5000` (for example, `192.168.10.50:5000`) in the URL bar to control the robot.  
+
+To access JupyterLab, use `[IP]:8888` (for example, `192.168.10.50:8888`).  
+
+If the robot is not connected to a known WiFi network, it will automatically set up a hotspot named "`AccessPopup`" with the password `1234567890`. You can then use a mobile phone or PC to connect to this hotspot. Once connected, open your browser and enter `192.168.50.5:5000` in the URL bar to control the robot.  
+
+To ensure compatibility with various types of robots running on Raspberry Pi, we utilize a config.yaml file to specify the particular robot being used. You can configure the robot by entering the following command:
+
+    s 22
+
+In this command, the s directive denotes a robot-type setting. The first digit, `2`, signifies that the robot is a `UGV Rover`, with `1` representing `RaspRover` and `3` indicating `UGV Beast`. The second digit, also `2`, specifies the module as `Camera PT`, where `0` denotes `Nothing` and `1` signifies `RoArm-M2`.
 
 # License
 ugv_rpi for the Raspberry Pi: an open source robotics platform for the Raspberry Pi.
