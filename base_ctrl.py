@@ -162,6 +162,7 @@ class BaseController:
 			self.base_data = self.data_buffer
 			return self.base_data
 		except Exception as e:
+			self.rl.clear_buffer()
 			print(f"[base_ctrl.feedback_data] error: {e}")
 
 
