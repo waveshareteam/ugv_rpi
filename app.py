@@ -99,6 +99,11 @@ cmd_actions = {
     f['code']['led_aut']: lambda: cvf.head_light_ctrl(1),
     f['code']['led_ton']: lambda: cvf.head_light_ctrl(2),
 
+    f['code']['release']: lambda: base.bus_servo_torque_lock(255, 0),
+    f['code']['s_panid']: lambda: base.bus_servo_id_set(255, 2),
+    f['code']['s_tilid']: lambda: base.bus_servo_id_set(255, 1),
+    f['code']['set_mid']: lambda: base.bus_servo_mid_set(255),
+
     f['code']['base_of']: lambda: base.lights_ctrl(0, base.head_light_status),
     f['code']['base_on']: lambda: base.lights_ctrl(255, base.head_light_status),
     f['code']['head_ct']: lambda: cvf.head_light_ctrl(3),
@@ -435,7 +440,7 @@ def handle_command():
 
 @app.route('/getAudioFiles', methods=['GET'])
 def get_audio_files():
-    files = [f for f in os.listdir(UPLOAD_FOLDER) if os.path.isfile(os.path.join(UPLOAD_FOLDER, f))]
+    files = [f for f in os.listdir(UPLOAD_FOLDER) if os.path.isfile(os.path.join(UPLOAD_FOLDER, f)) and (f.endswith('.mp3') or f.endswith('.wav'))]
     return jsonify(files)
 
 @app.route('/uploadAudio', methods=['POST'])
@@ -462,8 +467,9 @@ def audio_stop():
     audio_ctrl.stop()
     return jsonify({'success': 'Audio stop'})
 
-
-
+@app.route('/settings/<path:filename>')
+def serve_static_settings(filename):
+    return send_from_directory('templates', filename)
 
 
 
@@ -480,8 +486,6 @@ def handle_socket_json(json):
 def update_data_websocket_single():
     # {'T':1001,'L':0,'R':0,'r':0,'p':0,'v': 11,'pan':0,'tilt':0}
     try:
-        # if not cvf.show_base_info_flag:
-            # base.feedback_data()
         socket_data = {
             f['fb']['picture_size']:si.pictures_size,
             f['fb']['video_size']:  si.videos_size,
