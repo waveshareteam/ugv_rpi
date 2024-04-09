@@ -86,7 +86,16 @@ To ensure compatibility with various types of robots running on Raspberry Pi, we
 
     s 22
 
-In this command, the s directive denotes a robot-type setting. The first digit, `2`, signifies that the robot is a `UGV Rover`, with `1` representing `RaspRover` and `3` indicating `UGV Beast`. The second digit, also `2`, specifies the module as `Camera PT`, where `0` denotes `Nothing` and `1` signifies `RoArm-M2`.
+In this command, the s directive denotes a robot-type setting. The first digit, `2`, signifies that the robot is a `UGV Rover`, with `1` representing `RaspRover` and `3` indicating `UGV Beast`. The second digit, also `2`, specifies the module as `Camera PT`, where `0` denotes `Nothing` and `1` signifies `RoArm-M2`.  
+
+### Reboot Device
+If the program fails to run and encounters errors related to v4l2.py during runtime, you need to delete v4l2.py from both the Python virtual environment and the user environment. This will allow the program to automatically use the system-wide v4l2.py.  
+
+    cd ugv_rpi/  
+    sudo rm ugv-env/lib/python3.11/site-packages/v4l2.py  
+    sudo rm /home/[your_user_name]/.local/lib/python3.11/site-packages/v4l2.py  
+
+Now you can restart the main program app.py.
 
 # License
 ugv_rpi for the Raspberry Pi: an open source robotics platform for the Raspberry Pi.
