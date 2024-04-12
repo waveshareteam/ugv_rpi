@@ -3,3 +3,5 @@ __pycache__/
 tutorial_cn/__pycache__/
 tutorial_en/.ipynb_checkpoints/
 tutorial_cn/.ipynb_checkpoints/
+templates/pictures/photo*
+templates/videos/video*
