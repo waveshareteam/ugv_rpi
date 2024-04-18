@@ -726,14 +726,21 @@ var heartbeat_left  = 0;
 var heartbeat_right = 0;
 var speed_rate = 0.3;
 var defaultSpeed = speed_rate;
+let lastTimeCmdSend = Date.now();;
+let lastArgsCmdSend;
 function cmdSend(inputA, inputB, inputC){
-    var jsonData = {
-        "A":inputA,
-        "B":inputB,
-        "C":inputC
-    };
-    console.log(jsonData);
-    socket.send(JSON.stringify(jsonData));
+    const now = Date.now();
+    if (!lastArgsCmdSend || inputA != lastArgsCmdSend || now - lastTimeCmdSend >= 10) {
+        var jsonData = {
+            "A":inputA,
+            "B":inputB,
+            "C":inputC
+        };
+        console.log(jsonData);
+        socket.send(JSON.stringify(jsonData));
+        lastArgsCmdSend = inputA;
+        lastTimeCmdSend = now;
+    }
 }
 
 function cmdJsonCmd(jsonData){
