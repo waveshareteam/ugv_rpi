@@ -264,18 +264,23 @@ class BaseController:
 
 
 if __name__ == '__main__':
-	import time
+	# RPi5
+	base = BaseController('/dev/ttyAMA0', 115200)
 
-	gimbal = GimbalController('/dev/serial0', 115200)
-	gimbal.gimbal_lights_ctrl(255, 0)
+	# RPi4B
+	# base = BaseController('/dev/serial0', 115200)
 
-	while True:
-		try:
-			gimbal.gimbal_ctrl(-90, 0, 0, 0)
-			time.sleep(2)
-			gimbal.gimbal_ctrl(90, 60, 0, 0)
-			time.sleep(2)
-		except:
-			pass
+	# breath light for 15s
+	base.breath_light(15)
 
-	gimbal.gimbal_dev_close()
+	# gimble ctrl, look forward
+	#                x  y  spd acc
+	base.gimbal_ctrl(0, 0, 10, 0)
+    
+    # x(-180 ~ 180)
+	# x- look left
+	# x+ look right
+
+	# y(-30 ~ 90)
+	# y- look down
+	# y+ look up
