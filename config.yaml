@@ -3,7 +3,7 @@ args_config:
   arm_default_r: 0
   arm_default_z: 24
   max_rate: 1.0
-  max_speed: 0.5
+  max_speed: 1.3
   mid_rate: 0.66
   min_rate: 0.3
   slow_speed: 0.2
@@ -18,7 +18,7 @@ base_config:
   main_type: 2
   module_type: 0
   robot_name: UGV Rover
-  sbc_version: 0.91
+  sbc_version: 0.93
   use_lidar: false
 cmd_config:
   cmd_arm_ctrl_ui: 144

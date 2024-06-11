@@ -401,11 +401,11 @@ def cmdline_ctrl(args_string):
             f['args_config']['slow_speed'] = 0.3
         elif main_type == 2:
             f['base_config']['robot_name'] = "UGV Rover"
-            f['args_config']['max_speed'] = 0.5
+            f['args_config']['max_speed'] = 1.3
             f['args_config']['slow_speed'] = 0.2
         elif main_type == 3:
             f['base_config']['robot_name'] = "UGV Beast"
-            f['args_config']['max_speed'] = 0.5
+            f['args_config']['max_speed'] = 1.0
             f['args_config']['slow_speed'] = 0.2
         f['base_config']['main_type'] = main_type
         f['base_config']['module_type'] = module_type
