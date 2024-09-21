@@ -1,5 +1,5 @@
 #!/bin/bash
-ver="0.8-4.1: 29 Jan 2024"
+ver="0.8-6.3: 12 March 2024"
 #Copyright Graeme Richards - RaspberryConnect.com
 #Released under the GPL3 Licence (https://www.gnu.org/licenses/gpl-3.0.en.html)
 
@@ -27,15 +27,15 @@ DEF='\e[m'
 BOL='\e[1m'
 
 echo "Your system uses OS Version ${osver[@]::3}"
-if [ "${osver[0]}" != 'Raspbian' ] && [ "${osver[0]}" != 'Debian' ] && [ "${osver[0]}" != 'Ubuntu' ]; then
+if [ "${osver[0]}" != 'Raspbian' ] && [ "${osver[0]}" != 'Debian' ] && [ "${osver[0]}" != 'Ubuntu' ] && [ "${osver[0]}" != 'Arch' ]; then
 	echo -e $YEL"This installer has only been tested on the Raspberry Pi's PiOS 12 Bookworm"
-	echo -e "and Ubuntu 23.10 Raspberry Pi Image."$DEF
+	echo -e "Ubuntu 23.10 Raspberry Pi Image and Arch Linux Arm."$DEF
 	echo "It may not work on other Linux distributions."
 	echo "due to different Network setups."
 	read -p "Press a key to continue"
 fi
 nm="${osver[2]}" 
-if [ -z "${nm//[0-9]}" ] ;then
+if [ -z "${nm//[0-9]}" ] && [ "${osver[0]}" != 'Arch' ] ;then
 	if [ "${osver[2]}" -eq 11 ]; then #OS Bullseye
 		echo "OS Version" "${osver[2]}"
 		echo "This script only works on PIOS 11 Bullseye if Network Manager has been enabled"
@@ -50,11 +50,20 @@ if [ -z "${nm//[0-9]}" ] ;then
 	fi
 fi
 
-if nmcli -t -f RUNNING general | grep -v "running" ;then #NM not running
-	echo "Network Manager is required but is not the active system network service"
-	echo "Unable to continue."
+#Check if nmcli is installed
+command -v nmcli >/dev/null 2>&1
+if [ $? -eq 1 ]; then
+	echo "Network Manager is not installed. This script requires Network Manager to work." 
+	echo "Unable to continue"
 	exit 1
+else
+	if nmcli -t -f RUNNING general | grep -v "running" ;then #NM not running
+		echo "Network Manager is required but is not the active system network service"
+		echo "Unable to continue."
+		exit 1
+	fi
 fi
+
 
 add_service()
 {
@@ -152,6 +161,35 @@ install()
 					return
 				fi	
 			fi
+		elif [ "${osver[0]}" = 'Arch' ] ; then
+			p="$(pacman -Q iw)"
+			stat=$?
+			if [ $stat -ne 0 ]; then
+				echo "installing iw"
+				pacman -S iw
+			fi
+			stat=$?
+			if [ $stat -ne 0 ]; then
+				echo "Unable to install iw"
+				echo "Maybe the internet is not available. Please install iw and try again."
+				echo "Press enter to continue"
+				read xit
+				return
+			fi
+			p="$(pacman -Q dnsmasq)"
+			stat=$?
+			if [ $stat -ne 0 ]; then
+				echo "installing dnsmasq"
+				pacman -S dnsmasq
+			fi
+			stat=$?
+			if [ $stat -ne 0 ]; then
+				echo "Unable to install dnsmasq"
+				echo "Maybe the internet is not available. Please install dnsmasq and try again."
+				echo "Press enter to continue"
+				read xit
+				return
+			fi		
 		fi
 		cp "./$scriptname" "$script_path"
 		chmod +x "$script_path$scriptname"
@@ -434,12 +472,24 @@ updatessid()
 			echo "This must be at least 8 characters."
 			read ssidpw
 			if [ ! -z "$ssidpw" ] && [ ${#ssidpw} -ge 8 ] ;then
-				nmcli con modify "$x" wifi-sec.psk "$ssidpw"
-				echo -e "\nPassword for profile $x is"
-				npw="$(nmcli -t -s con show "$x" | grep 'wireless-security.psk:' )"	
-				echo ${npw:29}
-				d=1	
-				break
+				nmcli connection modify "$x" wifi-sec.psk "$ssidpw" >/dev/null 2>&1
+				echo "Attempting to connect to $x"
+				nmcli device wifi connect "$x" >/dev/null 2>&1
+				stat=$?
+				if [ $stat -eq 0 ] ; then
+					echo "Connection successful"
+					echo -e "\nThe Password for profile $x is"
+					npw="$(nmcli -t -s con show "$x" | grep 'wireless-security.psk:' )"	
+					echo ${npw:29}
+					d=1	
+					break
+				else
+					echo "The connection to $x Failed because of the change to the Password"
+					echo "The connection has been deleted. Please try again"
+					nmcli connection delete "$x" >/dev/null 2>&1
+					nmcli connection reload >/dev/null 2>&1
+					d=2				
+				fi
 			else
 				echo "A password was not entered or is less than 8 characters"
 				echo "The password has not been changed"
@@ -448,23 +498,32 @@ updatessid()
 		fi
 	done
 	
-	if [ $d -eq 0 ]; then #no existing profile for selection
+	if [ $d -eq 0 ]; then #no existing profile for selection, create a new one.
 		echo -e $YEL"Enter the Password for the Selected Wifi Network"$DEF
 		echo "This must be at least 8 characters"
 		echo "Selected SSID: $1"
 		echo -e "\nEnter password for the Wifi Network"
 		read chgpw
-		echo "Attempting to connect to new Wifi Network"
+		echo "Attempting to connect to the new Wifi Network"
 		if [ ! -z "$chgpw" ] && [ "${#chgpw}" -ge 8 ] ;then
 			#create new profile with details
-			nmcli dev wifi con "$1" password "$chgpw"
-			echo "Profile Created"
-			echo "$1"
-			pw="$( nmcli -t -s con show $1 | grep 'wireless-security.psk:' )"
-			echo ${pw:29}
+			nmcli device wifi connect "$1" password "$chgpw" >/dev/null 2>&1
+			stat=$?
+			if [ $stat -eq 0 ] ; then
+				echo "Profile Created"
+				echo "$1"
+				pw="$( nmcli -t -s con show $1 | grep 'wireless-security.psk:' )"
+				echo ${pw:29}
+				nmcli connection reload
+			else
+				echo "The connection to $1 Failed."
+				echo "The new profile has not been saved"
+				nmcli connection delete "$1" >/dev/null 2>&1
+				nmcli connection reload >/dev/null 2>&1
+			fi
 		else
 			echo "A password was not entered or is less than 8 characters"
-			echo "The password has not ben changed"
+			echo "The password has not been changed"
 		fi
 	fi
 }
@@ -569,7 +628,7 @@ until [ "$select" = "9" ]; do
 	
 	echo -e $YEL"Raspberryconnect.com"
 	echo "AccessPopup installation and setup"
-	echo -e "Version $ver  Installs AccessPopup ver 0.8-3 28 Jan 2024"$DEF
+	echo -e "Version $ver  Installs AccessPopup ver 0.8-6 12 July 2024"$DEF
 	echo "Connects to your home network when you are home or a nearby know wifi network."
 	echo "If no known wifi network is found then an Access Point is automatically activated"
 	echo -e "until a known network is back in range\n"

@@ -1,11 +1,17 @@
 installconfig.sh
+	ver 0.8-6 12 Mar 2024
+		Added Arch Linux Arm compatability when Network Manager is used.
+	ver 0.8-5 31 Jan 2024
+		When a new network is setup or a password is change, the connection is checked. If the connection fails to connect because 
+		the new password is invalid. Then the profile will be deleted otherwise it will cause an issue when in AP mode, as it will check against the 
+		bad network every 2 mins.
 	ver 0.8-4 28 Jan 2024
 		Added additional error checking and messages
 	ver 0.8-3 20 Jan 2024
 		Cleaned up option 5 so the SSID list doesn't include hidden ssid entries
 	ver 0.8-2 14 Jan 2024
 		Added support for Ubuntu Raspberry Pi Image
-		OS Compatability message fixed. It was removed before it could be read.
+		OS Compatability message fixed. It was cleared before it could be read.
 	ver 0.8-1 13 Dec 2023
 		fixed IP message errored when blank.
 	ver 0.8 08 Dec 2023:
@@ -14,6 +20,16 @@ installconfig.sh
 
 
 accesspopup
+	ver 0.8-6 12 Jul 2024
+		Some users reporting that while using a phone, they are unable to connect to the AP running on a RaspberryPi Zero W with PiOS Bookworm 32bit. Removing the AccessPopup profiles security group and strict encryption references from the 
+		config file solves the issue. These are automatically set by nmcli on creation of the profile in addition to how the Network Manager GUI creates the profile.
+		This issue only affected the PizeroW. The PiZero2 and Pi3/3B+ did not have an issue.
+	ver 0.8-5 27 Mar 2024
+		Only wireless profiles with a priority higher than -900 will be considered during a switch from the access point.
+			Users can exclude wireless profiles from being connected to, with the priority. These profiles would need to be manually selected to be use.
+		fixed issue where non wireless devices such as tun are wrongly being selected as a valid Network Manager profile. 
+	ver 0.8-4 3 Feb 2024
+		changes systemd check from string results to exit codes
 	ver 0.8-3 23 Jan 2024
 		Changed connection checks with NMCLI to use exit status instead of text output.
 		The Priority of the NM profile is used when choosing a valid network in range. Highest first.
@@ -22,7 +38,7 @@ accesspopup
 		cleaned up output text and messages
 		added more error handeling 
 	ver 0.8-1 12 Jan 2024
-		typo in active_wifi function caused if statment to always be true. So always checked rather when just when required
+		typo in active_wifi function caused 'if' statement to always be true. So always checked rather when just when required
 	ver 0.8 11 Dec 2023
 		Initial Release
 
