@@ -151,46 +151,46 @@ class OpencvFuncs():
         self.csi_camera_connected = False
         self.oak_camera_connected = False
 
-        # # usb camera init
-        # if self.usb_camera_connected:
-        #     self.camera = cv2.VideoCapture(0)
-        #     self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, f['video']['default_res_w'])
-        #     self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, f['video']['default_res_h'])
+        # usb camera init
+        if self.usb_camera_connected:
+            self.camera = cv2.VideoCapture(0)
+            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, f['video']['default_res_w'])
+            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, f['video']['default_res_h'])
 
-        # # csi camera init
-        # if not self.usb_camera_connected:
-        #     print("init csi camera.")
-        #     try:
-        #         self.encoder = H264Encoder(1000000)
-        #         self.picam2 = Picamera2()
-        #         self.picam2.configure(self.picam2.create_video_configuration(main={"format": 'XRGB8888', "size": (f['video']['default_res_w'], f['video']['default_res_h'])}))
-        #         self.picam2.start()
-        #         self.csi_camera_connected = True
-        #     except:
-        #         self.csi_camera_connected = False
+        # csi camera init
+        if not self.usb_camera_connected:
+            print("init csi camera.")
+            try:
+                self.encoder = H264Encoder(1000000)
+                self.picam2 = Picamera2()
+                self.picam2.configure(self.picam2.create_video_configuration(main={"format": 'XRGB8888', "size": (f['video']['default_res_w'], f['video']['default_res_h'])}))
+                self.picam2.start()
+                self.csi_camera_connected = True
+            except:
+                self.csi_camera_connected = False
 
-        # oak camera init 
-        # if not self.usb_camera_connected and not self.csi_camera_connected:
-        try:
-            self.pipeline = dai.Pipeline()
+        #oak camera init 
+        if not self.usb_camera_connected and not self.csi_camera_connected:
+            try:
+                self.pipeline = dai.Pipeline()
 
-            self.camRgb = self.pipeline.createColorCamera()
-            self.camRgb.setBoardSocket(dai.CameraBoardSocket.RGB)
-            self.camRgb.setInterleaved(False)
-            # self.camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_480_P)
-            self.camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_720_P)
+                self.camRgb = self.pipeline.createColorCamera()
+                self.camRgb.setBoardSocket(dai.CameraBoardSocket.RGB)
+                self.camRgb.setInterleaved(False)
+                # self.camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_480_P)
+                self.camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_720_P)
 
-            self.xout = self.pipeline.createXLinkOut()
-            self.xout.setStreamName("video")
-            self.camRgb.video.link(self.xout.input)
+                self.xout = self.pipeline.createXLinkOut()
+                self.xout.setStreamName("video")
+                self.camRgb.video.link(self.xout.input)
 
-            self.device = dai.Device(self.pipeline)
-            self.output_queue = self.device.getOutputQueue(name="video", maxSize=8, blocking=False)
+                self.device = dai.Device(self.pipeline)
+                self.output_queue = self.device.getOutputQueue(name="video", maxSize=8, blocking=False)
 
-            self.oak_camera_connected = True
-        except Exception as e:
-            print(f"[cv_ctrl.frame_process] error: {e}")
-            self.oak_camera_connected = False
+                self.oak_camera_connected = True
+            except Exception as e:
+                print(f"[cv_ctrl.frame_process] error: {e}")
+                self.oak_camera_connected = False
 
 
     def frame_process(self):
