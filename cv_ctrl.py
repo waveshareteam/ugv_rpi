@@ -15,6 +15,9 @@ from picamera2 import Picamera2
 from picamera2.encoders import H264Encoder, Encoder
 from picamera2.outputs import FfmpegOutput
 
+# libraries for oak camera
+import depthai as dai
+
 # config file.
 curpath = os.path.realpath(__file__)
 thisPath = os.path.dirname(curpath)
@@ -145,21 +148,49 @@ class OpencvFuncs():
 
         # camera type detection
         self.usb_camera_connected = self.usb_camera_detection()
+        self.csi_camera_connected = False
+        self.oak_camera_connected = False
 
-        # usb camera init
-        if self.usb_camera_connected:
-            self.camera = cv2.VideoCapture(0)
-            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, f['video']['default_res_w'])
-            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, f['video']['default_res_h'])
+        # # usb camera init
+        # if self.usb_camera_connected:
+        #     self.camera = cv2.VideoCapture(0)
+        #     self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, f['video']['default_res_w'])
+        #     self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, f['video']['default_res_h'])
 
-        # csi camera init
-        if not self.usb_camera_connected:
-            print("init csi camera.")
-            self.encoder = H264Encoder(1000000)
-            self.picam2 = Picamera2()
-            self.picam2.configure(self.picam2.create_video_configuration(main={"format": 'XRGB8888', "size": (f['video']['default_res_w'], f['video']['default_res_h'])}))
-            self.picam2.start()
+        # # csi camera init
+        # if not self.usb_camera_connected:
+        #     print("init csi camera.")
+        #     try:
+        #         self.encoder = H264Encoder(1000000)
+        #         self.picam2 = Picamera2()
+        #         self.picam2.configure(self.picam2.create_video_configuration(main={"format": 'XRGB8888', "size": (f['video']['default_res_w'], f['video']['default_res_h'])}))
+        #         self.picam2.start()
+        #         self.csi_camera_connected = True
+        #     except:
+        #         self.csi_camera_connected = False
 
+        # oak camera init 
+        # if not self.usb_camera_connected and not self.csi_camera_connected:
+        try:
+            self.pipeline = dai.Pipeline()
+
+            self.camRgb = self.pipeline.createColorCamera()
+            self.camRgb.setBoardSocket(dai.CameraBoardSocket.RGB)
+            self.camRgb.setInterleaved(False)
+            # self.camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_480_P)
+            self.camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_720_P)
+
+            self.xout = self.pipeline.createXLinkOut()
+            self.xout.setStreamName("video")
+            self.camRgb.video.link(self.xout.input)
+
+            self.device = dai.Device(self.pipeline)
+            self.output_queue = self.device.getOutputQueue(name="video", maxSize=8, blocking=False)
+
+            self.oak_camera_connected = True
+        except Exception as e:
+            print(f"[cv_ctrl.frame_process] error: {e}")
+            self.oak_camera_connected = False
 
 
     def frame_process(self):
@@ -170,8 +201,20 @@ class OpencvFuncs():
                     self.camera.release()
                     time.sleep(1)
                     self.camera = cv2.VideoCapture(0)
-            else:
+            elif self.csi_camera_connected:
                 input_frame = self.picam2.capture_array()
+            elif self.oak_camera_connected:
+                input_frame = self.output_queue.get().getCvFrame()
+                input_frame = cv2.resize(input_frame, (640, 480))
+            else:
+                input_frame = 255 * np.ones((480, 640, 3), dtype=np.uint8)
+                cv2.putText(input_frame, f"camera read failed... \nusb - csi - oak", 
+                            (round(0.05*640), round(0.1*640 + 5 * 13)), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.369, (0, 0, 0), 1)
+                ret, buffer = cv2.imencode('.jpg', input_frame, [int(cv2.IMWRITE_JPEG_QUALITY), self.video_quality])
+                input_frame = buffer.tobytes()
+                time.sleep(1)
+                return input_frame
         except Exception as e:
             print(f"[cv_ctrl.frame_process] error: {e}")
             input_frame = 255 * np.ones((480, 640, 3), dtype=np.uint8)

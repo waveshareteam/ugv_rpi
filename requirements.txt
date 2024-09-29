@@ -347,3 +347,4 @@ widgetsnbextension==4.0.9
 wrapt==1.14.1
 wsproto==1.2.0
 zipp==1.0.0
+depthais
