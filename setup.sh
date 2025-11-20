@@ -140,8 +140,12 @@ echo "# Install required software."
 sudo apt update
 sudo apt upgrade -y
 sudo apt install -y libopenblas-dev libatlas3-base libcamera-dev python3-opencv portaudio19-dev
-sudo apt install -y util-linux procps hostapd iproute2 iw haveged dnsmasq iptables espeak
+sudo apt install -y arandr util-linux procps hostapd iproute2 iw haveged dnsmasq iptables espeak
 
+sudo apt install -y ffmpeg
+sudo apt install -y libavformat-dev libavcodec-dev libavdevice-dev \
+                 libavutil-dev libavfilter-dev libswscale-dev \
+                 libswresample-dev
 
 echo "# Create a Python virtual environment."
 # Create a Python virtual environment

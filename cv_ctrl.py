@@ -178,14 +178,20 @@ class OpencvFuncs():
                 self.camRgb.setBoardSocket(dai.CameraBoardSocket.RGB)
                 self.camRgb.setInterleaved(False)
                 # self.camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_480_P)
-                self.camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_720_P)
+                # self.camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_720_P)
+                self.camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
+                self.camRgb.setPreviewSize(640, 480)
+                self.camRgb.setPreviewKeepAspectRatio(False)
 
                 self.xout = self.pipeline.createXLinkOut()
-                self.xout.setStreamName("video")
-                self.camRgb.video.link(self.xout.input)
-
+                # self.xout.setStreamName("video")
+                # self.camRgb.video.link(self.xout.input)
+                self.xout.setStreamName("preview")
+                self.camRgb.preview.link(self.xout.input)
+                
                 self.device = dai.Device(self.pipeline)
-                self.output_queue = self.device.getOutputQueue(name="video", maxSize=8, blocking=False)
+                # self.output_queue = self.device.getOutputQueue(name="video", maxSize=8, blocking=False)
+                self.output_queue = self.device.getOutputQueue(name="preview", maxSize=8, blocking=False)
 
                 self.oak_camera_connected = True
             except Exception as e:
