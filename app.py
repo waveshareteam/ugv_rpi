@@ -46,6 +46,7 @@ import logging
 import cv_ctrl
 import audio_ctrl
 import os_info
+import ugv_api
 
 # Get system info
 UPLOAD_FOLDER = thisPath + '/sounds/others'
@@ -68,6 +69,10 @@ pcs = set()
 
 # Camera funcs
 cvf = cv_ctrl.OpencvFuncs(thisPath, base)
+
+# Register safe REST API (non-breaking, additive)
+ugv_api.init_api(base, cvf, si, f)
+app.register_blueprint(ugv_api.ugv_api)
 
 cmd_actions = {
     f['code']['zoom_x1']: lambda: cvf.scale_ctrl(1),
