@@ -247,6 +247,43 @@ def api_routine_search():
     return jsonify({'status': 'ok' if ok else 'error', 'message': msg}), code
 
 
+@ugv_api.route('/api/ugv/routine/sentinel', methods=['POST'])
+def api_routine_sentinel():
+    """
+    Sentinel: reactive guard with auto-recording on detection.
+    Body: {cv_mode, scan_interval (s), record_on_detect, max_duration, confirm}
+    """
+    d = request.get_json() or {}
+    if not d.get('confirm', False):
+        return jsonify({'status': 'requires_confirm',
+                        'message': 'sentinel requires confirm=true (autonomous reactive mode)'}), 400
+    ok, msg = ugv_routines.sentinel(
+        cv_mode          = d.get('cv_mode', 'motion'),
+        scan_interval    = float(d.get('scan_interval', 10.0)),
+        record_on_detect = bool(d.get('record_on_detect', True)),
+        max_duration     = float(d.get('max_duration', ugv_routines.GUARD_MAX_DURATION)),
+    )
+    return jsonify({'status': 'ok' if ok else 'error', 'message': msg}), 200 if ok else 409
+
+
+@ugv_api.route('/api/ugv/routine/follow', methods=['POST'])
+def api_routine_follow():
+    """
+    Follow mode: track a person/face with gimbal + optional base rotation.
+    Body: {cv_mode, max_duration (s, max 600), base_follow (bool), confirm}
+    """
+    d = request.get_json() or {}
+    if not d.get('confirm', False):
+        return jsonify({'status': 'requires_confirm',
+                        'message': 'follow requires confirm=true (robot will move)'}), 400
+    ok, msg = ugv_routines.follow(
+        cv_mode      = d.get('cv_mode', 'mp_pose'),
+        max_duration = float(d.get('max_duration', ugv_routines.FOLLOW_MAX_DUR)),
+        base_follow  = bool(d.get('base_follow', True)),
+    )
+    return jsonify({'status': 'ok' if ok else 'error', 'message': msg}), 200 if ok else 409
+
+
 @ugv_api.route('/api/ugv/routine/stop', methods=['POST'])
 def api_routine_stop():
     """Request clean stop of the running routine."""

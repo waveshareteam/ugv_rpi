@@ -498,6 +498,141 @@ def ros2_status():
         return {"available": True, "nodes": [], "topics": [], "error": str(e)}
 
 
+# ── SENTINEL ─────────────────────────────────────────────────────────────────
+
+def sentinel(scan_interval=10.0, max_duration=GUARD_MAX_DURATION,
+             record_on_detect=True, cv_mode="motion"):
+    """
+    Enhanced reactive guard: motion/person detection with auto-recording,
+    aggressive gimbal scans, and event logging on detection.
+    confirm=True required from API layer.
+    """
+    max_duration  = min(float(max_duration), GUARD_MAX_DURATION)
+    scan_interval = max(5.0, float(scan_interval))
+    params = dict(cv_mode=cv_mode, scan_interval=scan_interval,
+                  record_on_detect=record_on_detect, max_duration=max_duration)
+    return start_routine(_sentinel_thread, params,
+                         scan_interval, record_on_detect, cv_mode, max_duration)
+
+
+def _sentinel_thread(scan_interval, record_on_detect, cv_mode, max_duration):
+    _log("sentinel_start", dict(cv_mode=cv_mode, scan_interval=scan_interval,
+                                record_on_detect=record_on_detect))
+    try:
+        ok, reason = _safety_ok()
+        if not ok:
+            _log("sentinel_abort", {"reason": reason})
+            return
+
+        _motors_stop()
+        _gimbal_center()
+        _cvf.head_light_ctrl(1)                              # auto head light
+        _cv_set(_resolve_cv(cv_mode))
+        _cvf.set_detection_reaction(
+            _f["code"]["re_reco"] if record_on_detect else _f["code"]["re_capt"]
+        )
+        _cvf.set_movtion_lock(False)                         # allow gimbal to follow
+
+        start     = time.time()
+        last_scan = time.time()
+
+        while not _stop_event.is_set():
+            if time.time() - start >= max_duration:
+                break
+
+            ok, reason = _safety_ok()
+            if not ok:
+                _log("sentinel_abort_mid", {"reason": reason})
+                break
+
+            if time.time() - last_scan >= scan_interval:
+                _log("sentinel_scan")
+                _gimbal_sweep(SCAN_FULL, pause=0.45)
+                last_scan = time.time()
+
+            _sleep_interruptible(0.5)
+
+    except Exception as e:
+        _log("sentinel_error", {"error": str(e)})
+    finally:
+        _motors_stop()
+        _cvf.set_detection_reaction(_f["code"]["re_none"])
+        _cvf.set_movtion_lock(True)
+        _cv_none()
+        _cvf.head_light_ctrl(0)
+        _gimbal_center()
+        _set_state(IDLE)
+        _log("sentinel_end")
+
+
+# ── FOLLOW ────────────────────────────────────────────────────────────────────
+
+FOLLOW_DEAD_ZONE = 15.0    # degrees — ignored pan error
+FOLLOW_SPEED     = 0.18    # base speed for rotation correction
+FOLLOW_MAX_DUR   = 300.0   # default 5 min
+
+
+def follow(cv_mode="mp_pose", max_duration=FOLLOW_MAX_DUR, base_follow=True):
+    """
+    Follow mode: enables tracking CV, unlocks gimbal tracking.
+    If base_follow=True: rotates robot base to keep pan_angle near 0.
+    confirm=True required from API layer.
+    """
+    max_duration = min(float(max_duration), 600.0)
+    params = dict(cv_mode=cv_mode, max_duration=max_duration, base_follow=base_follow)
+    return start_routine(_follow_thread, params, cv_mode, max_duration, base_follow)
+
+
+def _follow_thread(cv_mode, max_duration, base_follow):
+    _log("follow_start", dict(cv_mode=cv_mode, base_follow=base_follow))
+    try:
+        ok, reason = _safety_ok()
+        if not ok:
+            _log("follow_abort", {"reason": reason})
+            return
+
+        _motors_stop()
+        _gimbal_center()
+        _cv_set(_resolve_cv(cv_mode))
+        _cvf.set_movtion_lock(False)   # gimbal tracks target
+
+        start = time.time()
+
+        while not _stop_event.is_set():
+            if time.time() - start >= max_duration:
+                break
+
+            ok, reason = _safety_ok()
+            if not ok:
+                _log("follow_abort_mid", {"reason": reason})
+                break
+
+            if base_follow:
+                pan = _cvf.pan_angle
+                if pan > FOLLOW_DEAD_ZONE:
+                    _base.base_speed_ctrl(FOLLOW_SPEED, -FOLLOW_SPEED)
+                    time.sleep(0.12)
+                    _motors_stop()
+                elif pan < -FOLLOW_DEAD_ZONE:
+                    _base.base_speed_ctrl(-FOLLOW_SPEED, FOLLOW_SPEED)
+                    time.sleep(0.12)
+                    _motors_stop()
+
+            _sleep_interruptible(0.25)
+
+    except Exception as e:
+        _log("follow_error", {"error": str(e)})
+    finally:
+        _motors_stop()
+        _cvf.set_movtion_lock(True)
+        _cv_none()
+        _gimbal_center()
+        _set_state(IDLE)
+        _log("follow_end")
+
+
+# ── ROS2 integration (optional, graceful degradation) ───────────────────────
+
 def ros2_command(cmd_type, payload):
     """
     Execute a ROS2 command via subprocess.

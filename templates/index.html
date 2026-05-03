@@ -7,6 +7,7 @@
     <script src="./js-yaml.min.js"></script>
     <script src="./socket.io.js"></script>
     <link rel="stylesheet" type="text/css" href="./style.css">
+    <link rel="stylesheet" type="text/css" href="./ugv_hud.css">
     <style type="text/css">
     </style>
   </head>
@@ -23,6 +24,7 @@
                                         <div id="DT" class="feed_ico feed_ico_none"></div>
                                         <div class="feed_ico feed_ico_arrow"></div>
                                         <div id="DR" class="feed_ico feed_ico_none"></div>
+                                        <div id="ugv-mode-hud" class="mode-manual">MANUAL</div>
                                     </div>
                                     <div class="feed feed_u">
                                         <div>
@@ -62,6 +64,14 @@
                                         <p><span>Zoom: </span><span id="zoom-num">1x</span></p>
                                         <p><span>Photos: </span><span id="photos-size">0</span></p>
                                         <p><span>Videos: </span><span id="videos-size">0</span></p>
+                                        <div id="hud-speed-bar-wrap">
+                                          <span class="hud-speed-label">SPEED</span>
+                                          <div id="hud-speed-bar"><div id="hud-speed-fill"></div></div>
+                                        </div>
+                                        <div style="display:flex;gap:6px;margin-top:4px;">
+                                          <div id="hud-pan-gauge"  class="hud-gauge-container"></div>
+                                          <div id="hud-tilt-gauge" class="hud-gauge-container"></div>
+                                        </div>
                                     </div>
                                     <div class="feed feed_b">
                                         <div class="pan">
@@ -94,12 +104,16 @@
                             <div><button class="normal_btn normal_btn_size video_btn_zoom btn_ico" id="zoom_btn"></button></div>
                             <div class="video_btn_px_select">
                                 <button id="video_pixel_btn" class="normal_btn normal_btn_size video_btn_px">WebRTC</button>
-                                <ul id="video_pixel_btn_list">
-                                    <!-- <li class="normal_btn" onclick="cmdSend(max_res,2,0);">960P</li>
-                                    <li class="normal_btn" onclick="cmdSend(mid_res,1,0);">480P</li>
-                                    <li class="normal_btn" onclick="cmdSend(min_res,0,0);">240P</li> -->
-                                </ul>
+                                <ul id="video_pixel_btn_list"></ul>
                             </div>
+                        </div>
+                        <div class="fullscreen-btn">
+                          <button id="fullscreen-btn" class="normal_btn normal_btn_size" onclick="toggleFullscreen()" title="Fullscreen">⛶</button>
+                        </div>
+                        <div style="display:flex;align-items:center;margin-left:auto;">
+                          <button class="normal_btn normal_btn_size" onclick="ugvStop()"
+                            style="border-color:rgba(231,76,60,0.5);color:#e74c3c;font-size:11px;padding:4px 10px;"
+                            title="Emergency stop">⛔ STOP</button>
                         </div>
                     </div>
                 </div>
@@ -196,9 +210,19 @@
                 </div>
             </section>
             <section class="section_feed_ctrl box_outline">
-                <div>
+
+                <!-- ── Tab navigation ── -->
+                <div class="ugv-tab-nav">
+                    <button class="ugv-tab-btn ugv-tab-active" data-tab="controls" onclick="ugvSwitchTab('controls')">Controls</button>
+                    <button class="ugv-tab-btn" data-tab="modes"   onclick="ugvSwitchTab('modes')">Modes</button>
+                    <button class="ugv-tab-btn" data-tab="network" onclick="ugvSwitchTab('network')">Network</button>
+                    <button class="ugv-tab-btn" data-tab="events"  onclick="ugvSwitchTab('events')">Events</button>
+                </div>
+
+                <!-- ── Tab: Controls (existing) ── -->
+                <div class="ugv-tab-panel ugv-tab-show" id="ugv-tab-controls">
                     <div class="feed_ctrl_btn">
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">Speed Ctrl</h2>
                             <div id="speed_ctrl_btn">
                                 <div><button onclick="speedCtrl(min_rate);" class="ctl_btn ctl_btn_active">Slow</button></div>
@@ -206,7 +230,7 @@
                                 <div><button onclick="speedCtrl(max_rate);" class="ctl_btn">Fast</button></div>
                             </div>
                         </div>
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">PT Steady/Ahead</h2>
                             <div id="steady_ctrl_btn">
                                 <div><button onclick="steadyCtrl(0, stickSendY);" class="ctl_btn ctl_btn_active">OFF</button></div>
@@ -214,7 +238,7 @@
                                 <div><button onclick="lookAhead();" class="ctl_btn">Ahead</button></div>
                             </div>
                         </div>
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">Simple Detection Type</h2>
                             <div id="d_type_btn">
                                 <div><button onclick="cmdSend(cv_none,0,0);" class="ctl_btn ctl_btn_active">None</button></div>
@@ -222,7 +246,7 @@
                                 <div><button onclick="cmdSend(cv_face,2,0);" class="ctl_btn ctl_btn_faces btn_ico">Faces</button></div>
                             </div>
                         </div>
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">Simple Detection Reaction</h2>
                             <div id="d_reaction_btn">
                                 <div><button onclick="cmdSend(re_none,0,0);" class="ctl_btn ctl_btn_active">None</button></div>
@@ -230,7 +254,7 @@
                                 <div><button onclick="cmdSend(re_reco,0,0);" class="ctl_btn ctl_btn_record btn_ico">Record</button></div>
                             </div>
                         </div>
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">Advance CV Ctrl</h2>
                             <div id="adv_cv_ctrl_btn">
                                 <div><button onclick="cmdSend(mc_lock,0,0);" class="ctl_btn">LOCK</button></div>
@@ -238,7 +262,7 @@
                                 <div><button onclick="cmdSend(cv_auto,0,0);" class="ctl_btn">AUTODRIVE</button></div>
                             </div>
                         </div>
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">Advance CV Funcs</h2>
                             <div id="adv_cv_funcs_btn">
                                 <div><button onclick="cmdSend(cv_objs,0,0);" class="ctl_btn">OBJECTS</button></div>
@@ -246,14 +270,14 @@
                                 <div><button onclick="cmdSend(mp_hand,0,0);" class="ctl_btn">HAND GS</button></div>
                             </div>
                         </div>
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">MediaPipe Funcs</h2>
                             <div id="mp_funcs_btn">
                                 <div><button onclick="cmdSend(mp_face,0,0);" class="ctl_btn">MP FACE</button></div>
                                 <div><button onclick="cmdSend(mp_pose,0,0);" class="ctl_btn">MP POSE</button></div>
                             </div>
                         </div>
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">Head Light Ctrl</h2>
                             <div id="light_ctrl_btn">
                                 <div><button onclick="cmdSend(led_off,0,0);" class="ctl_btn ctl_btn_active">OFF</button></div>
@@ -261,7 +285,7 @@
                                 <div><button onclick="cmdSend(led_ton,0,0);" class="ctl_btn">ON</button></div>
                             </div>
                         </div>
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">Base Light Ctrl</h2>
                             <div id="base_led_ctrl_btn">
                                 <div><button onclick="cmdSend(base_of,0,0);" class="ctl_btn">BASE OFF</button></div>
@@ -273,6 +297,104 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- ── Tab: Autonomous Modes ── -->
+                <div class="ugv-tab-panel" id="ugv-tab-modes">
+                    <div class="modes-panel">
+                        <!-- Routine status bar -->
+                        <div id="routine-status-bar">
+                            <div id="routine-status-dot"></div>
+                            <span id="routine-status-name">IDLE</span>
+                            <button id="routine-stop-btn" onclick="ugvStopRoutine()">■ STOP</button>
+                        </div>
+
+                        <!-- PATROL -->
+                        <div class="mode-card">
+                            <h3>🚶 Patrol</h3>
+                            <p>Robot advances in segments, scanning with gimbal.</p>
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:11px;color:#888;">
+                                <label>Duration (s)</label>
+                                <input id="patrol-duration" type="number" value="120" min="10" max="600"
+                                    style="width:60px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+                                    border-radius:4px;color:#d8d8d8;padding:3px 6px;font-size:11px;font-family:inherit;">
+                            </div>
+                            <div class="mode-btns">
+                                <button class="mode-start-btn" onclick="ugvPatrol()">▶ Start Patrol</button>
+                            </div>
+                        </div>
+
+                        <!-- WATCH -->
+                        <div class="mode-card">
+                            <h3>👁 Watch</h3>
+                            <p>Immobile, CV detection active, periodic gimbal scan.</p>
+                            <div class="mode-btns">
+                                <button class="mode-start-btn" onclick="ugvWatch('motion')">Motion</button>
+                                <button class="mode-start-btn" onclick="ugvWatch('face')">Face</button>
+                                <button class="mode-start-btn" onclick="ugvWatch('mp_pose')">Person</button>
+                            </div>
+                        </div>
+
+                        <!-- SEARCH -->
+                        <div class="mode-card">
+                            <h3>🔍 Search</h3>
+                            <p>Full 3D gimbal sweep, base stays fixed, takes photo.</p>
+                            <div class="mode-btns">
+                                <button class="mode-start-btn" onclick="ugvSearch('face')">Face</button>
+                                <button class="mode-start-btn" onclick="ugvSearch('mp_pose')">Person</button>
+                                <button class="mode-start-btn" onclick="ugvSearch('motion')">Motion</button>
+                                <button class="mode-start-btn" onclick="ugvSearch('color')">Color</button>
+                            </div>
+                        </div>
+
+                        <!-- SENTINEL -->
+                        <div class="mode-card">
+                            <h3>🔴 Sentinel</h3>
+                            <p>Reactive guard: auto-records on detection, aggressive scans.</p>
+                            <div class="mode-btns">
+                                <button class="mode-start-btn warning" onclick="ugvSentinel()">▶ Start Sentinel</button>
+                            </div>
+                        </div>
+
+                        <!-- FOLLOW -->
+                        <div class="mode-card">
+                            <h3>🎯 Follow</h3>
+                            <p>Tracks a person with gimbal and rotates base to follow.</p>
+                            <div class="mode-btns">
+                                <button class="mode-start-btn danger" onclick="ugvFollow()">▶ Start Follow</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Tab: Network ── -->
+                <div class="ugv-tab-panel" id="ugv-tab-network">
+                    <div class="network-panel">
+                        <h3 class="net-section-title">ZeroTier</h3>
+                        <div class="zt-status-row">
+                            <div id="zt-dot"></div>
+                            <span id="zt-node-id">—</span>
+                            <span id="zt-version"></span>
+                        </div>
+                        <ul class="zt-networks-list" id="zt-networks-list">
+                            <li style="color:#666;font-size:11px">Loading…</li>
+                        </ul>
+                        <div class="zt-join-row">
+                            <input id="zt-join-input" type="text" placeholder="Network ID (16 hex chars)"
+                                maxlength="16" autocomplete="off">
+                            <button class="zt-btn" onclick="ztJoin()">Join</button>
+                            <button class="zt-btn" onclick="refreshZeroTier ? refreshZeroTier() : ugvSwitchTab('network')" title="Refresh">↻</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Tab: Events ── -->
+                <div class="ugv-tab-panel" id="ugv-tab-events">
+                    <div class="events-panel">
+                        <ul id="ugv-event-log"></ul>
+                        <button class="events-refresh-btn" onclick="refreshEvents ? refreshEvents() : null">↻ Refresh</button>
+                    </div>
+                </div>
+
             </section>
         </div>
         <div class="box2">
@@ -306,6 +428,7 @@
             </section>
         </div>
     </main>
+    <div id="ugv-toasts"></div>
     <div id="video-del-tips" class="video-del-tips"><p>Successfully deleted video</p></div>
     <footer style="visibility: hidden;">
         <div style="background-image: url('./img/white/record.svg');"></div>
@@ -327,5 +450,6 @@
     <!-- <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.0/jquery.min.js"></script> -->
     <script src="./control.js"></script>
     <script src="./main.js"></script>
+    <script src="./ugv_hud.js"></script>
 </body>
 </html>

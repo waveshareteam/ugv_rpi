@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(Get-ChildItem -Path . -Recurse -Filter \"*.html\" -o *.css -o *.js)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "PowerShell(Get-ChildItem -Path . -Depth 1 | Where-Object {$_.PSIsContainer} | Select-Object -ExpandProperty Name)",
+      "Bash(Find -name \"*.py\" -path \"*/templates*\" -o -name \"config.yaml\")",
+      "Bash(Get-ChildItem -Path . -Filter \"*.py\" -Depth 0)"
     ]
   }
 }

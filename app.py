@@ -42,11 +42,14 @@ import uuid
 import asyncio
 import time
 import logging
-import logging
 import cv_ctrl
 import audio_ctrl
 import os_info
 import ugv_api
+from ugv_logger import get_logger
+from routes.zerotier import zt_bp
+
+log = get_logger("app")
 
 # Get system info
 UPLOAD_FOLDER = thisPath + '/sounds/others'
@@ -73,6 +76,11 @@ cvf = cv_ctrl.OpencvFuncs(thisPath, base)
 # Register safe REST API (non-breaking, additive)
 ugv_api.init_api(base, cvf, si, f, thisPath)
 app.register_blueprint(ugv_api.ugv_api)
+
+# Register ZeroTier management routes
+app.register_blueprint(zt_bp)
+
+log.info("UGV Flask app initialized — blueprints registered")
 
 cmd_actions = {
     f['code']['zoom_x1']: lambda: cvf.scale_ctrl(1),
