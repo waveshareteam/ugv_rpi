@@ -71,7 +71,7 @@ pcs = set()
 cvf = cv_ctrl.OpencvFuncs(thisPath, base)
 
 # Register safe REST API (non-breaking, additive)
-ugv_api.init_api(base, cvf, si, f)
+ugv_api.init_api(base, cvf, si, f, thisPath)
 app.register_blueprint(ugv_api.ugv_api)
 
 cmd_actions = {
