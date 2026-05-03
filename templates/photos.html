@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>UGV — Photos</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./ugv_hud.css">
+  <link rel="stylesheet" href="./themes/nexus.css" id="v3-theme-css">
+</head>
+<body>
+  <div id="v2-topbar">
+    <div id="v2-topbar-left">
+      <span style="color:var(--t-primary);font-size:13px;letter-spacing:.1em;">⬡ UGV</span>
+    </div>
+    <div id="v2-topbar-right">
+      <span id="v2-user-info" style="color:var(--t-text-2);font-size:11px;"></span>
+      <a href="/auth/logout" style="color:var(--t-text-2);font-size:10px;padding:2px 8px;border:1px solid var(--t-border-dim);border-radius:3px;text-decoration:none;">LOGOUT</a>
+    </div>
+  </div>
+
+  <div id="v3-nav">
+    <a class="v3-nav-btn" href="/">PILOT</a>
+    <div class="v3-nav-sep"></div>
+    <a class="v3-nav-btn" href="/remote">REMOTE</a>
+    <a class="v3-nav-btn active" href="/photos" aria-current="page">PHOTOS</a>
+    <a class="v3-nav-btn" href="/videos">VIDEOS</a>
+    <div class="v3-nav-sep"></div>
+    <a class="v3-nav-btn v3-nav-admin" href="/admin">ADMIN</a>
+  </div>
+
+  <div class="nx-page">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h1 style="font-size:16px;color:var(--t-primary);letter-spacing:.12em;margin:0;">
+        PHOTO GALLERY <span id="photo-count" style="font-size:12px;color:var(--t-text-2);">({{ photos|length }})</span>
+      </h1>
+      <button class="nx-btn" onclick="captureNew()">📷 Capture</button>
+    </div>
+
+    {% if photos %}
+    <div class="media-grid" id="photo-grid">
+      {% for photo in photos %}
+      <div class="media-card" id="card-{{ loop.index }}">
+        <img src="./pictures/{{ photo }}" alt="{{ photo }}"
+             onclick="openPhoto('{{ photo }}')" loading="lazy">
+        <div class="media-card-info">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;"
+                title="{{ photo }}">{{ photo }}</span>
+          <button class="media-card-del" onclick="deletePhoto('{{ photo }}', {{ loop.index }})"
+                  title="Delete">✕</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="nx-section" style="text-align:center;padding:40px;">
+      <div style="font-size:32px;margin-bottom:12px;">📷</div>
+      <div style="color:var(--t-text-2);">No photos yet. Use the robot controls to capture.</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Lightbox overlay -->
+  <div id="lightbox" onclick="closeLightbox()"
+       style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;
+              display:none;align-items:center;justify-content:center;cursor:zoom-out;">
+    <img id="lightbox-img" style="max-width:90vw;max-height:90vh;border-radius:4px;">
+  </div>
+
+  <div id="ugv-toasts"></div>
+  <script src="./jquery-3.7.1.min.js"></script>
+  <script src="./ugv_hud.js"></script>
+  <script>
+    // Apply saved theme
+    const t = localStorage.getItem("ugv-theme") || "nexus";
+    const link = document.getElementById("v3-theme-css");
+    if (link) link.href = "/themes/" + t + ".css";
+
+    // Load user info
+    fetch("/auth/me").then(r=>r.json()).then(d => {
+      if (d.authenticated) {
+        const info = document.getElementById("v2-user-info");
+        if (info) info.textContent = d.username + " (" + d.role + ")";
+        const admin = document.querySelector(".v3-nav-admin");
+        if (admin && d.role !== "admin") admin.style.display = "none";
+      }
+    }).catch(()=>{});
+
+    window.openPhoto = function(name) {
+      const lb = document.getElementById("lightbox");
+      document.getElementById("lightbox-img").src = "./pictures/" + name;
+      lb.style.display = "flex";
+    };
+    window.closeLightbox = function() {
+      document.getElementById("lightbox").style.display = "none";
+    };
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape") closeLightbox();
+    });
+
+    window.deletePhoto = function(name, idx) {
+      if (!confirm("Delete " + name + "?")) return;
+      const data = new FormData();
+      data.append("filename", name);
+      fetch("/delete_photo", {method:"POST", body:data})
+        .then(r=>r.json())
+        .then(d => {
+          if (d.success) {
+            const card = document.getElementById("card-" + idx);
+            if (card) card.remove();
+            ugvToast && ugvToast("Photo deleted", "warn", 2500);
+            const cnt = document.getElementById("photo-count");
+            if (cnt) cnt.textContent = "(" + document.querySelectorAll(".media-card").length + ")";
+          } else {
+            ugvToast && ugvToast("Delete failed", "error");
+          }
+        }).catch(() => ugvToast && ugvToast("Error", "error"));
+    };
+
+    window.captureNew = function() {
+      fetch("/api/ugv/photo", {method:"POST"})
+        .then(r=>r.json())
+        .then(d => {
+          ugvToast && ugvToast(d.file ? "Photo saved: " + d.file : "Captured", "ok");
+          setTimeout(() => location.reload(), 1500);
+        }).catch(() => ugvToast && ugvToast("Capture failed","error"));
+    };
+  </script>
+</body>
+</html>

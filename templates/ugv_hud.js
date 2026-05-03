@@ -385,7 +385,7 @@
   }
 
   /* ─── V2 Theme system ────────────────────────────────────────────── */
-  const THEMES = ["dark", "cyberpunk", "military", "terminal"];
+  const THEMES = ["dark", "cyberpunk", "military", "terminal", "nexus"];
 
   window.v2SetTheme = function (name) {
     if (!THEMES.includes(name)) return;
@@ -415,7 +415,7 @@
   };
 
   function v2InitTheme() {
-    const saved = localStorage.getItem("ugv-theme") || "dark";
+    const saved = localStorage.getItem("ugv-theme") || "nexus";
     v2SetTheme(saved);
   }
 
@@ -482,4 +482,76 @@
   } else {
     setTimeout(init, 200);
   }
+
+  /* ═══════════════════════════════════════════════════════════════
+     V3 — Retractable panel + navigation
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* ─── Panel collapse/expand ───────────────────────────────────── */
+  const _PANEL_KEY = "ugv-panel-collapsed";
+
+  window.v3TogglePanel = function () {
+    const panel  = document.querySelector(".section_feed_ctrl");
+    const box1   = document.querySelector(".box1");
+    const btn    = document.getElementById("panel-toggle-btn");
+    if (!panel) return;
+
+    const collapsed = panel.classList.toggle("panel-collapsed");
+    if (box1) box1.classList.toggle("panel-collapsed-parent", collapsed);
+    if (btn)  btn.textContent = collapsed ? "›" : "‹";
+    localStorage.setItem(_PANEL_KEY, collapsed ? "1" : "0");
+  };
+
+  function v3InitPanel() {
+    const collapsed = localStorage.getItem(_PANEL_KEY) === "1";
+    const panel = document.querySelector(".section_feed_ctrl");
+    const box1  = document.querySelector(".box1");
+    const btn   = document.getElementById("panel-toggle-btn");
+    if (!panel) return;
+    if (collapsed) {
+      panel.classList.add("panel-collapsed");
+      if (box1) box1.classList.add("panel-collapsed-parent");
+      if (btn)  btn.textContent = "›";
+    } else {
+      if (btn) btn.textContent = "‹";
+    }
+  }
+
+  /* ─── V3 navigation: mark active page ───────────────────────── */
+  function v3MarkActiveNav() {
+    const path = window.location.pathname;
+    document.querySelectorAll(".v3-nav-btn").forEach(btn => {
+      const href = btn.getAttribute("href");
+      if (!href) return;
+      const isActive = href === "/" ? path === "/" : path.startsWith(href);
+      btn.classList.toggle("active", isActive);
+      if (isActive) btn.setAttribute("aria-current", "page");
+      else          btn.removeAttribute("aria-current");
+    });
+  }
+
+  /* ─── V3 animation toggle (from settings) ───────────────────── */
+  function v3ApplyAnimation() {
+    fetch("/api/v2/settings")
+      .then(r => r.json())
+      .then(d => {
+        const enabled = (d.ui && d.ui.animation_enabled) !== false;
+        if (!enabled) document.body.classList.add("no-animation");
+      })
+      .catch(() => {});
+  }
+
+  /* ─── V3 init ────────────────────────────────────────────────── */
+  function v3Init() {
+    v3InitPanel();
+    v3MarkActiveNav();
+    v3ApplyAnimation();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", v3Init);
+  } else {
+    v3Init();
+  }
+
 })();

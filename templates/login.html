@@ -4,150 +4,238 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>UGV — Login</title>
-  <link rel="stylesheet" href="./style.css">
-  <link rel="stylesheet" href="./themes/dark.css" id="theme-css">
+  <link rel="stylesheet" href="./themes/nexus.css">
   <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
     body {
+      margin: 0;
+      min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
-      margin: 0;
-      background: var(--t-bg-0, #0f0f11);
+      background: var(--t-bg-0, #040810);
       font-family: var(--t-font, 'Source Code Pro', monospace);
+      color: var(--t-text-1, #dce8f7);
+    }
+
+    /* Mesh background (same as nexus.css body::before) */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(46,249,196,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(46,249,196,0.025) 1px, transparent 1px);
+      background-size: 48px 48px;
+      animation: grid-drift 40s linear infinite;
+    }
+    @keyframes grid-drift {
+      0%   { background-position: 0 0; }
+      100% { background-position: 48px 48px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      body::before { animation: none; }
+    }
+
+    .login-wrap {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 380px;
+      padding: 20px;
     }
 
     .login-card {
-      width: 360px;
-      background: var(--t-bg-1, #1E1E20);
-      border: 1px solid var(--t-primary-border, rgba(79,245,192,0.25));
-      border-radius: var(--t-radius, 6px);
-      padding: 36px 32px;
-      box-shadow: var(--t-shadow, 0 4px 24px rgba(0,0,0,0.5));
+      background: rgba(11,17,32,0.88);
+      border: 1px solid var(--t-primary-border, rgba(46,249,196,0.25));
+      border-radius: 8px;
+      padding: 38px 34px 32px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(46,249,196,0.05);
+      backdrop-filter: blur(12px);
+    }
+
+    /* Decorative corner accents */
+    .login-card::before,
+    .login-card::after {
+      content: '';
+      position: absolute;
+      width: 12px; height: 12px;
+      border-color: var(--t-primary, #2ef9c4);
+      border-style: solid;
+    }
+    .login-card::before {
+      top: -1px; left: -1px;
+      border-width: 2px 0 0 2px;
+      border-radius: 8px 0 0 0;
+    }
+    .login-card::after {
+      bottom: -1px; right: -1px;
+      border-width: 0 2px 2px 0;
+      border-radius: 0 0 8px 0;
     }
 
     .login-logo {
       text-align: center;
-      margin-bottom: 28px;
+      margin-bottom: 30px;
+    }
+    .login-logo-icon {
+      font-size: 28px;
+      color: var(--t-primary, #2ef9c4);
+      display: block;
+      margin-bottom: 10px;
+      animation: logo-pulse 3s ease-in-out infinite;
+    }
+    @keyframes logo-pulse {
+      0%, 100% { opacity: 1; text-shadow: 0 0 12px rgba(46,249,196,0.6); }
+      50%       { opacity: 0.75; text-shadow: 0 0 4px rgba(46,249,196,0.2); }
     }
     .login-logo h1 {
-      font-size: 22px;
-      color: var(--t-primary, #4FF5C0);
-      margin: 0 0 4px;
-      letter-spacing: 0.12em;
+      font-size: 20px;
+      color: var(--t-primary, #2ef9c4);
+      margin: 0 0 5px;
+      letter-spacing: 0.14em;
+      font-weight: normal;
     }
     .login-logo p {
-      font-size: 11px;
-      color: var(--t-text-2, #999);
+      font-size: 10px;
+      color: var(--t-text-3, #364a5e);
       margin: 0;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
     }
 
-    .login-field { margin-bottom: 16px; }
+    .login-field { margin-bottom: 18px; }
     .login-field label {
       display: block;
-      font-size: 11px;
-      color: var(--t-text-2, #999);
-      letter-spacing: 0.08em;
+      font-size: 10px;
+      color: var(--t-text-2, #7a98bb);
+      letter-spacing: 0.1em;
       text-transform: uppercase;
-      margin-bottom: 6px;
+      margin-bottom: 7px;
     }
     .login-field input {
       width: 100%;
-      box-sizing: border-box;
-      background: var(--t-bg-2, #26262a);
-      border: 1px solid var(--t-border, rgba(255,255,255,0.08));
-      border-radius: 4px;
-      color: var(--t-text-1, #d8d8d8);
+      background: rgba(14,22,40,0.8);
+      border: 1px solid var(--t-border-dim, rgba(255,255,255,0.07));
+      border-radius: 5px;
+      color: var(--t-text-1, #dce8f7);
       font-size: 13px;
       font-family: inherit;
-      padding: 9px 12px;
-      transition: border-color 0.2s;
+      padding: 10px 13px;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
     .login-field input:focus {
       outline: none;
-      border-color: var(--t-primary, #4FF5C0);
+      border-color: var(--t-primary-border, rgba(46,249,196,0.3));
+      box-shadow: 0 0 0 2px var(--t-primary-dim, rgba(46,249,196,0.1));
     }
+    .login-field input::placeholder { color: var(--t-text-3, #364a5e); }
 
     .login-btn {
       width: 100%;
-      padding: 10px;
-      margin-top: 8px;
+      padding: 11px;
+      margin-top: 6px;
       background: none;
-      border: 1px solid var(--t-primary, #4FF5C0);
-      border-radius: 4px;
-      color: var(--t-primary, #4FF5C0);
+      border: 1px solid var(--t-primary, #2ef9c4);
+      border-radius: 5px;
+      color: var(--t-primary, #2ef9c4);
       font-size: 13px;
       font-family: inherit;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: background 0.2s, box-shadow 0.2s;
     }
-    .login-btn:hover { background: var(--t-primary-dim, rgba(79,245,192,0.12)); }
+    .login-btn:hover {
+      background: var(--t-primary-dim, rgba(46,249,196,0.1));
+      box-shadow: 0 0 16px rgba(46,249,196,0.15);
+    }
+    .login-btn:active { transform: scale(0.99); }
 
-    .login-error {
-      background: rgba(231,76,60,0.12);
-      border: 1px solid rgba(231,76,60,0.3);
-      border-radius: 4px;
-      color: #e74c3c;
+    /* Flash / error messages from Flask */
+    .flash { margin-bottom: 16px; }
+    .flash-error {
+      background: rgba(240,78,106,0.1);
+      border: 1px solid rgba(240,78,106,0.3);
+      border-radius: 5px;
+      color: var(--t-danger, #f04e6a);
       font-size: 12px;
-      padding: 8px 12px;
-      margin-bottom: 16px;
-      display: none;
+      padding: 9px 13px;
     }
-    .login-error.visible { display: block; }
+    .flash-success {
+      background: rgba(46,249,196,0.08);
+      border: 1px solid rgba(46,249,196,0.2);
+      border-radius: 5px;
+      color: var(--t-primary, #2ef9c4);
+      font-size: 12px;
+      padding: 9px 13px;
+    }
 
     .login-footer {
-      margin-top: 24px;
+      margin-top: 22px;
       text-align: center;
       font-size: 10px;
-      color: var(--t-text-3, #555);
+      color: var(--t-text-3, #364a5e);
+      letter-spacing: 0.06em;
+    }
+    .login-footer a {
+      color: var(--t-text-3, #364a5e);
+      text-decoration: none;
     }
 
-    /* Flash messages from Flask */
-    .flash { margin-bottom: 14px; }
-    .flash-error {
-      background: rgba(231,76,60,0.12);
-      border: 1px solid rgba(231,76,60,0.3);
-      border-radius: 4px;
-      color: #e74c3c;
-      font-size: 12px;
-      padding: 8px 12px;
+    /* Subtle version tag */
+    .version-tag {
+      position: fixed;
+      bottom: 14px;
+      right: 16px;
+      font-size: 9px;
+      color: var(--t-text-3, #364a5e);
+      letter-spacing: 0.06em;
+      z-index: 1;
     }
   </style>
 </head>
 <body>
-  <div class="login-card">
-    <div class="login-logo">
-      <h1>⬡ UGV CONTROL</h1>
-      <p>WAVESHARE ROBOT PLATFORM v2</p>
-    </div>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-logo">
+        <span class="login-logo-icon">⬡</span>
+        <h1>UGV CONTROL</h1>
+        <p>Waveshare Robot Platform &nbsp;·&nbsp; V3</p>
+      </div>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% for category, msg in messages %}
-        <div class="flash">
-          <div class="flash-{{ category }}">{{ msg }}</div>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, msg in messages %}
+          <div class="flash">
+            <div class="flash-{{ category }}">{{ msg }}</div>
+          </div>
+        {% endfor %}
+      {% endwith %}
+
+      <form method="POST"
+            action="/auth/login{% if request.args.get('next') %}?next={{ request.args.get('next')|urlencode }}{% endif %}">
+        <div class="login-field">
+          <label>Username</label>
+          <input type="text" name="username" autocomplete="username"
+                 autofocus required placeholder="admin">
         </div>
-      {% endfor %}
-    {% endwith %}
+        <div class="login-field">
+          <label>Password</label>
+          <input type="password" name="password" autocomplete="current-password"
+                 required placeholder="••••••••">
+        </div>
+        <button type="submit" class="login-btn">LOGIN →</button>
+      </form>
 
-    <form method="POST" action="/auth/login{% if request.args.get('next') %}?next={{ request.args.get('next') }}{% endif %}">
-      <div class="login-field">
-        <label>Username</label>
-        <input type="text" name="username" autocomplete="username"
-               autofocus required placeholder="admin">
+      <div class="login-footer">
+        UGV Nexus &nbsp;|&nbsp; Secure Access
       </div>
-      <div class="login-field">
-        <label>Password</label>
-        <input type="password" name="password" autocomplete="current-password"
-               required placeholder="••••••••">
-      </div>
-      <button type="submit" class="login-btn">LOGIN →</button>
-    </form>
-
-    <div class="login-footer">
-      UGV Waveshare &nbsp;|&nbsp; Secure Access
     </div>
   </div>
+
+  <span class="version-tag">v3.0 · nexus</span>
 </body>
 </html>

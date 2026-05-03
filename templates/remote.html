@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>UGV — Remote Access</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./ugv_hud.css">
+  <link rel="stylesheet" href="./themes/nexus.css" id="v3-theme-css">
+</head>
+<body>
+  <!-- Top bar -->
+  <div id="v2-topbar">
+    <div id="v2-topbar-left">
+      <span style="color:var(--t-primary);font-size:13px;letter-spacing:.1em;">⬡ UGV</span>
+    </div>
+    <div id="v2-topbar-right">
+      <span id="v2-user-info" style="color:var(--t-text-2);font-size:11px;"></span>
+      <a href="/auth/logout" id="v2-logout-link"
+         style="color:var(--t-text-2);font-size:10px;padding:2px 8px;border:1px solid var(--t-border-dim);border-radius:3px;text-decoration:none;">LOGOUT</a>
+    </div>
+  </div>
+
+  <!-- V3 Navigation -->
+  <div id="v3-nav">
+    <a class="v3-nav-btn" href="/">PILOT</a>
+    <div class="v3-nav-sep"></div>
+    <a class="v3-nav-btn active" href="/remote" aria-current="page">REMOTE</a>
+    <a class="v3-nav-btn" href="/photos">PHOTOS</a>
+    <a class="v3-nav-btn" href="/videos">VIDEOS</a>
+    <div class="v3-nav-sep"></div>
+    <a class="v3-nav-btn v3-nav-admin" href="/admin">ADMIN</a>
+  </div>
+
+  <!-- Page content -->
+  <div class="nx-page">
+    <h1 style="font-size:16px;color:var(--t-primary);letter-spacing:.12em;margin-bottom:24px;">
+      VPN &amp; REMOTE ACCESS
+    </h1>
+
+    <!-- ── ZeroTier ─────────────────────────────────────────────── -->
+    <div class="nx-section">
+      <div class="nx-section-title">
+        ZeroTier
+        <span id="zt-status-badge" class="nx-badge nx-badge-off" style="margin-left:10px;">—</span>
+      </div>
+
+      <div class="nx-row">
+        <span class="nx-label">Node ID</span>
+        <span class="nx-value" id="zt-node">—</span>
+      </div>
+      <div class="nx-row">
+        <span class="nx-label">Version</span>
+        <span class="nx-value" id="zt-ver">—</span>
+      </div>
+      <div class="nx-row">
+        <span class="nx-label">Status</span>
+        <span class="nx-value" id="zt-online">—</span>
+      </div>
+
+      <div style="margin:12px 0 8px;">
+        <div style="font-size:10px;color:var(--t-text-2);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px;">Networks</div>
+        <table class="nx-table" id="zt-net-table">
+          <thead>
+            <tr><th>ID</th><th>Name</th><th>Status</th><th>IPs</th><th></th></tr>
+          </thead>
+          <tbody id="zt-net-body">
+            <tr><td colspan="5" style="color:var(--t-text-3);">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px;" id="zt-join-row">
+        <input class="nx-input" type="text" id="zt-join-input"
+               placeholder="Network ID (16 hex chars)" maxlength="16" autocomplete="off">
+        <button class="nx-btn" onclick="ztJoinRemote()">Join</button>
+        <button class="nx-btn secondary" onclick="loadZeroTier()">↻ Refresh</button>
+      </div>
+    </div>
+
+    <!-- ── WireGuard ───────────────────────────────────────────── -->
+    <div class="nx-section">
+      <div class="nx-section-title">
+        WireGuard
+        <span id="wg-status-badge" class="nx-badge nx-badge-off" style="margin-left:10px;">—</span>
+      </div>
+
+      <div id="wg-not-installed" style="display:none;color:var(--t-text-3);font-size:12px;">
+        WireGuard (<code>wg</code>) not installed on this system.
+      </div>
+
+      <div id="wg-content" style="display:none;">
+        <div id="wg-interfaces-list"></div>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <input class="nx-input" type="text" id="wg-iface-input"
+                 placeholder="Interface (default: wg0)" value="wg0" style="max-width:160px;">
+          <button class="nx-btn" onclick="wgAction('up')">↑ Up</button>
+          <button class="nx-btn danger" onclick="wgAction('down')">↓ Down</button>
+          <button class="nx-btn secondary" onclick="wgAction('restart')">↻ Restart</button>
+          <button class="nx-btn secondary" style="margin-left:auto;" onclick="loadWireGuard()">↻ Refresh</button>
+        </div>
+        <p style="font-size:10px;color:var(--t-text-3);margin-top:8px;">
+          Private keys are never displayed. Up/Down/Restart require admin role.
+        </p>
+      </div>
+    </div>
+
+    <!-- ── Cellular modem ──────────────────────────────────────── -->
+    <div class="nx-section">
+      <div class="nx-section-title">
+        Cellular Modem
+        <span id="cell-status-badge" class="nx-badge nx-badge-off" style="margin-left:10px;">—</span>
+      </div>
+
+      <div class="nx-row">
+        <span class="nx-label">Device</span>
+        <span class="nx-value" id="cell-device">Sierra Wireless MC8700</span>
+      </div>
+      <div class="nx-row">
+        <span class="nx-label">Detected</span>
+        <span class="nx-value" id="cell-detected">—</span>
+      </div>
+      <div class="nx-row">
+        <span class="nx-label">USB Info</span>
+        <span class="nx-value" id="cell-usb" style="font-size:10px;color:var(--t-text-2);">—</span>
+      </div>
+      <div class="nx-row">
+        <span class="nx-label">TTY Ports</span>
+        <span class="nx-value" id="cell-tty">—</span>
+      </div>
+      <div class="nx-row">
+        <span class="nx-label">ModemManager</span>
+        <span class="nx-value" id="cell-mm">—</span>
+      </div>
+      <div class="nx-row">
+        <span class="nx-label">Operator</span>
+        <span class="nx-value" id="cell-operator">—</span>
+      </div>
+      <div class="nx-row">
+        <span class="nx-label">Signal</span>
+        <span class="nx-value" id="cell-signal">—</span>
+      </div>
+      <div class="nx-row">
+        <span class="nx-label">Access Tech</span>
+        <span class="nx-value" id="cell-tech">—</span>
+      </div>
+      <div class="nx-row">
+        <span class="nx-label">State</span>
+        <span class="nx-value" id="cell-state">—</span>
+      </div>
+      <div class="nx-row">
+        <span class="nx-label">Interface IP</span>
+        <span class="nx-value" id="cell-ip">—</span>
+      </div>
+      <div style="margin-top:10px;">
+        <button class="nx-btn secondary" onclick="loadCellular()">↻ Refresh</button>
+      </div>
+    </div>
+
+    <!-- ── Network Interfaces ──────────────────────────────────── -->
+    <div class="nx-section">
+      <div class="nx-section-title">Network Interfaces</div>
+      <table class="nx-table" id="iface-table">
+        <thead>
+          <tr><th>Interface</th><th>State</th><th>IPs</th><th>MAC</th><th>MTU</th></tr>
+        </thead>
+        <tbody id="iface-body">
+          <tr><td colspan="5" style="color:var(--t-text-3);">Loading…</td></tr>
+        </tbody>
+      </table>
+      <div class="nx-row" style="margin-top:12px;">
+        <span class="nx-label">Default Route</span>
+        <span class="nx-value" id="default-route">—</span>
+      </div>
+      <div style="margin-top:8px;">
+        <button class="nx-btn secondary" onclick="loadInterfaces()">↻ Refresh</button>
+      </div>
+    </div>
+  </div><!-- /.nx-page -->
+
+  <!-- Toast container -->
+  <div id="ugv-toasts"></div>
+
+  <script src="./jquery-3.7.1.min.js"></script>
+  <script src="./ugv_hud.js"></script>
+  <script>
+  /* ── Remote page JS ───────────────────────────────────────────── */
+  function apiPost(path, body) {
+    return fetch(path, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(body || {}),
+    }).then(r => r.json());
+  }
+
+  /* ZeroTier */
+  function loadZeroTier() {
+    fetch("/api/remote/zerotier/status").then(r => r.json()).then(d => {
+      const badge = document.getElementById("zt-status-badge");
+      if (!d.installed) {
+        badge.textContent = "NOT INSTALLED";
+        badge.className = "nx-badge nx-badge-err";
+        document.getElementById("zt-net-body").innerHTML =
+          "<tr><td colspan='5' style='color:var(--t-text-3)'>ZeroTier not installed</td></tr>";
+        return;
+      }
+      if (!d.running) {
+        badge.textContent = "NOT RUNNING";
+        badge.className = "nx-badge nx-badge-warn";
+        return;
+      }
+      badge.textContent = d.online ? "ONLINE" : "OFFLINE";
+      badge.className = "nx-badge " + (d.online ? "nx-badge-ok" : "nx-badge-err");
+      document.getElementById("zt-node").textContent = d.node_id || "—";
+      document.getElementById("zt-ver").textContent  = d.version  || "—";
+      document.getElementById("zt-online").textContent = d.online ? "Online" : "Offline";
+
+      const nets = d.networks || [];
+      const tbody = document.getElementById("zt-net-body");
+      if (!nets.length) {
+        tbody.innerHTML = "<tr><td colspan='5' style='color:var(--t-text-3)'>No networks joined</td></tr>";
+      } else {
+        tbody.innerHTML = nets.map(n => {
+          const ok = (n.status||"").toUpperCase().includes("ACCESS");
+          return `<tr>
+            <td style="font-variant-numeric:tabular-nums">${n.id}</td>
+            <td>${n.name}</td>
+            <td class="${ok?"nx-badge-ok":"nx-badge-err"}">${n.status}</td>
+            <td>${n.ips||"—"}</td>
+            <td><button class="nx-btn danger" style="padding:2px 8px;font-size:10px"
+                onclick="ztLeaveRemote('${n.id}')">Leave</button></td>
+          </tr>`;
+        }).join("");
+      }
+    }).catch(() => { ugvToast && ugvToast("ZeroTier status failed","error"); });
+  }
+
+  window.ztJoinRemote = function() {
+    const nid = (document.getElementById("zt-join-input").value||"").trim();
+    if (!nid) { ugvToast && ugvToast("Enter network ID","warn"); return; }
+    apiPost("/api/remote/zerotier/join",{network_id:nid}).then(d => {
+      ugvToast && ugvToast(d.ok ? "Joined "+nid : (d.error||"Failed"), d.ok?"ok":"error");
+      if (d.ok) { document.getElementById("zt-join-input").value=""; setTimeout(loadZeroTier,2000); }
+    }).catch(() => { ugvToast && ugvToast("API error","error"); });
+  };
+  window.ztLeaveRemote = function(nid) {
+    if (!confirm("Leave network "+nid+"?")) return;
+    apiPost("/api/remote/zerotier/leave",{network_id:nid}).then(d => {
+      ugvToast && ugvToast(d.ok?"Left "+nid:(d.error||"Failed"),d.ok?"warn":"error");
+      if (d.ok) setTimeout(loadZeroTier,2000);
+    });
+  };
+
+  /* WireGuard */
+  function loadWireGuard() {
+    fetch("/api/remote/wireguard/status").then(r => r.json()).then(d => {
+      const badge = document.getElementById("wg-status-badge");
+      const notInst = document.getElementById("wg-not-installed");
+      const content = document.getElementById("wg-content");
+      if (!d.installed) {
+        badge.textContent = "NOT INSTALLED"; badge.className = "nx-badge nx-badge-off";
+        notInst.style.display=""; content.style.display="none"; return;
+      }
+      content.style.display=""; notInst.style.display="none";
+      const ifaces = d.interfaces || {};
+      const names = Object.keys(ifaces);
+      badge.textContent = names.length ? names.join(", ") : "NO INTERFACES";
+      badge.className = "nx-badge " + (names.length ? "nx-badge-ok" : "nx-badge-off");
+
+      const listEl = document.getElementById("wg-interfaces-list");
+      if (!names.length) {
+        listEl.innerHTML = "<div style='color:var(--t-text-3);font-size:12px'>No WireGuard interfaces found. Use wg-quick up wg0 to start.</div>";
+        return;
+      }
+      listEl.innerHTML = names.map(iface => {
+        const i = ifaces[iface];
+        const peers = (i.peers||[]).map(p => {
+          const rx = (p.transfer_rx_b/1024).toFixed(1);
+          const tx = (p.transfer_tx_b/1024).toFixed(1);
+          const hs = p.latest_handshake && p.latest_handshake!=="0"
+            ? new Date(parseInt(p.latest_handshake)*1000).toLocaleTimeString()
+            : "—";
+          return `<tr style="font-size:11px">
+            <td colspan="2" style="padding-left:16px;color:var(--t-text-2)">
+              ${p.public_key.substring(0,12)}…
+            </td>
+            <td>${p.endpoint||"—"}</td>
+            <td>${p.allowed_ips}</td>
+            <td>${hs}</td>
+            <td>${rx}/${tx} KB</td>
+          </tr>`;
+        }).join("");
+        return `<div style="margin-bottom:12px">
+          <div class="nx-row"><span class="nx-label">${iface}</span>
+            <span class="nx-value">Port ${i.listen_port}</span>
+            <span class="nx-value" style="margin-left:8px;font-size:10px;color:var(--t-text-2)">
+              pub: ${(i.public_key||"").substring(0,16)}…
+            </span>
+          </div>
+          ${peers ? `<table class="nx-table">
+            <thead><tr><th colspan="2">Peer</th><th>Endpoint</th><th>Allowed IPs</th>
+            <th>Last HS</th><th>RX/TX</th></tr></thead>
+            <tbody>${peers}</tbody></table>` : "<div style='font-size:11px;color:var(--t-text-3)'>No peers</div>"}
+        </div>`;
+      }).join("");
+    }).catch(() => {});
+  }
+
+  window.wgAction = function(action) {
+    const iface = document.getElementById("wg-iface-input").value.trim() || "wg0";
+    apiPost("/api/remote/wireguard/"+action, {interface:iface}).then(d => {
+      ugvToast && ugvToast(d.ok ? action+" OK" : (d.message||"Failed"),
+                           d.ok ? "ok" : "error");
+      if (d.ok) setTimeout(loadWireGuard, 1500);
+    }).catch(() => { ugvToast && ugvToast("API error","error"); });
+  };
+
+  /* Cellular */
+  function loadCellular() {
+    fetch("/api/remote/cellular/status").then(r => r.json()).then(d => {
+      const badge = document.getElementById("cell-status-badge");
+      const det = d.modem_detected;
+      badge.textContent = det ? "DETECTED" : "NOT FOUND";
+      badge.className = "nx-badge " + (det ? "nx-badge-ok" : "nx-badge-off");
+
+      document.getElementById("cell-detected").textContent = det ? "Yes" : "No";
+      document.getElementById("cell-usb").textContent = d.usb_info || "—";
+      document.getElementById("cell-tty").textContent =
+        (d.tty_ports||[]).join(", ") || "—";
+
+      const mm = d.modemmanager || {};
+      if (!mm.available) {
+        document.getElementById("cell-mm").textContent =
+          "mmcli not installed — " + (mm.error || "ModemManager unavailable");
+      } else if (!mm.modem_found) {
+        document.getElementById("cell-mm").textContent = "No modem registered in ModemManager";
+      } else {
+        document.getElementById("cell-mm").textContent =
+          "Modem #" + (mm.modem_id || "?") + " — " + (mm.state || "unknown");
+      }
+
+      document.getElementById("cell-operator").textContent = mm.operator || "—";
+      document.getElementById("cell-signal").textContent   =
+        mm.signal_percent ? mm.signal_percent + "%" : "—";
+      document.getElementById("cell-tech").textContent     = mm.access_tech || "—";
+      document.getElementById("cell-state").textContent    = mm.state || "—";
+
+      const ip = d.interface_ip;
+      document.getElementById("cell-ip").textContent =
+        ip ? ip.interface + ": " + ip.ip : "—";
+    }).catch(() => {});
+  }
+
+  /* Network interfaces */
+  function loadInterfaces() {
+    fetch("/api/remote/interfaces").then(r => r.json()).then(d => {
+      const tbody = document.getElementById("iface-body");
+      const ifaces = d.interfaces || [];
+      tbody.innerHTML = ifaces.map(i => {
+        const up = (i.state||"").toUpperCase() === "UP";
+        const stateCls = up ? "nx-badge-ok" : "nx-badge-off";
+        return `<tr>
+          <td style="font-weight:bold;color:var(--t-text-1)">${i.name}</td>
+          <td class="${stateCls}">${i.state||"?"}</td>
+          <td>${(i.ips||[]).join(", ")||"—"}</td>
+          <td style="font-size:10px;color:var(--t-text-2)">${i.mac||"—"}</td>
+          <td style="color:var(--t-text-2)">${i.mtu||"—"}</td>
+        </tr>`;
+      }).join("") || "<tr><td colspan='5' style='color:var(--t-text-3)'>No interfaces found</td></tr>";
+
+      const dr = d.default_route;
+      document.getElementById("default-route").textContent =
+        dr ? dr.gateway + " via " + dr.dev : "—";
+    }).catch(() => {});
+  }
+
+  /* User info (same as main page) */
+  function loadUser() {
+    fetch("/auth/me").then(r=>r.json()).then(d => {
+      const info = document.getElementById("v2-user-info");
+      const admin = document.querySelector(".v3-nav-admin");
+      if (d.authenticated) {
+        if (info) info.textContent = d.username + " (" + d.role + ")";
+        if (admin && d.role !== "admin") admin.style.display = "none";
+      }
+    }).catch(()=>{});
+  }
+
+  /* Init */
+  document.addEventListener("DOMContentLoaded", function() {
+    // Apply saved theme
+    const t = localStorage.getItem("ugv-theme") || "nexus";
+    const link = document.getElementById("v3-theme-css");
+    if (link) link.href = "/themes/" + t + ".css";
+
+    loadUser();
+    loadZeroTier();
+    loadWireGuard();
+    loadCellular();
+    loadInterfaces();
+  });
+  </script>
+</body>
+</html>

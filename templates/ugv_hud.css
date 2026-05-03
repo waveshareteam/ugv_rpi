@@ -485,3 +485,139 @@
   #ugv-toasts  { bottom: 10px; right: 10px; }
   .ugv-toast   { min-width: 160px; font-size: 11px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   V3 ADDITIONS
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── V3 Navigation bar ──────────────────────────────────────────── */
+#v3-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 16px;
+  background: rgba(4,8,16,0.92);
+  border-bottom: 1px solid var(--hud-border, rgba(79,245,192,0.12));
+  position: sticky;
+  top: 32px;
+  z-index: 99;
+  flex-shrink: 0;
+  min-height: 34px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#v3-nav::-webkit-scrollbar { display: none; }
+
+.v3-nav-btn {
+  padding: 8px 13px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--t-text-2, #7a98bb);
+  font-family: var(--t-font, 'Source Code Pro', monospace);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: color 0.18s, border-color 0.18s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.v3-nav-btn:hover {
+  color: var(--t-text-1, #dce8f7);
+  text-decoration: none;
+}
+.v3-nav-btn.active,
+.v3-nav-btn[aria-current="page"] {
+  color: var(--hud-green, #2ef9c4);
+  border-bottom-color: var(--hud-green, #2ef9c4);
+}
+.v3-nav-sep {
+  width: 1px;
+  height: 16px;
+  background: rgba(255,255,255,0.07);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ── Panel toggle button ────────────────────────────────────────── */
+#panel-toggle-btn {
+  position: absolute;
+  right: calc(var(--panel-width, 320px) - 1px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 40px;
+  background: var(--t-bg-2, #0b1120);
+  border: 1px solid var(--hud-border, rgba(79,245,192,0.15));
+  border-right: none;
+  border-radius: 5px 0 0 5px;
+  color: var(--t-text-2, #7a98bb);
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  transition: background 0.18s, color 0.18s, right 0.28s;
+  line-height: 1;
+}
+#panel-toggle-btn:hover {
+  background: var(--t-bg-3, #0e1628);
+  color: var(--hud-green, #2ef9c4);
+}
+
+/* ── Video section positioning context ──────────────────────────── */
+.section_video { position: relative; }
+
+/* ── Right panel retractable ────────────────────────────────────── */
+.section_feed_ctrl {
+  transition: width 0.28s cubic-bezier(.4,0,.2,1),
+              min-width 0.28s ease,
+              opacity 0.22s ease;
+  overflow: hidden;
+}
+.section_feed_ctrl.panel-collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+  border-left: none !important;
+  padding: 0 !important;
+}
+
+/* When panel is collapsed, video section fills space */
+.box1.panel-collapsed-parent .section_video {
+  flex: 1 1 100%;
+}
+
+/* ── V3 topbar: remove theme picker, keep it clean ──────────────── */
+#v2-theme-picker { display: none !important; }
+#v2-theme-label  { display: none !important; }
+
+/* ── Tab count badge ────────────────────────────────────────────── */
+.v3-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: var(--hud-green, #2ef9c4);
+  color: #040810;
+  font-size: 9px;
+  font-weight: bold;
+  border-radius: 8px;
+  line-height: 1;
+}
+
+/* ── Responsive: on mobile collapse nav labels ───────────────────── */
+@media (max-width: 600px) {
+  .v3-nav-btn { padding: 7px 8px; font-size: 9px; letter-spacing: 0.04em; }
+  #v3-nav { padding: 0 6px; }
+  #panel-toggle-btn { display: none; }
+}

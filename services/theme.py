@@ -9,8 +9,8 @@ from ugv_logger import get_logger
 
 log = get_logger("theme")
 
-VALID_THEMES = {"dark", "cyberpunk", "military", "terminal"}
-DEFAULT_THEME = "dark"
+VALID_THEMES = {"dark", "cyberpunk", "military", "terminal", "nexus"}
+DEFAULT_THEME = "nexus"
 
 _HERE        = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _THEMES_DIR  = os.path.join(_HERE, "templates", "themes")

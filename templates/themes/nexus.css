@@ -1,0 +1,444 @@
+/* ═══════════════════════════════════════════════════════════════════
+   NEXUS — V3 Default Theme
+   Futuristic dark, cyan/violet accents, subtle mesh animation.
+   Sets CSS variables consumed by style.css, ugv_hud.css, and
+   all V3 UI components.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── CSS Variables ─────────────────────────────────────────────── */
+:root {
+  /* Backgrounds */
+  --t-bg-0:           #040810;
+  --t-bg-1:           #070b14;
+  --t-bg-2:           #0b1120;
+  --t-bg-3:           #0e1628;
+  --t-bg-card:        rgba(11,17,32,0.85);
+
+  /* Accents */
+  --t-primary:        #2ef9c4;
+  --t-primary-dim:    rgba(46,249,196,0.12);
+  --t-primary-border: rgba(46,249,196,0.28);
+  --t-secondary:      #a855f7;
+  --t-secondary-dim:  rgba(168,85,247,0.12);
+  --t-secondary-border: rgba(168,85,247,0.3);
+
+  /* Status */
+  --t-warn:           #f59e0b;
+  --t-warn-dim:       rgba(245,158,11,0.12);
+  --t-danger:         #f04e6a;
+  --t-danger-dim:     rgba(240,78,106,0.12);
+  --t-success:        var(--t-primary);
+  --t-info:           #60a5fa;
+
+  /* Text */
+  --t-text-1:         #dce8f7;
+  --t-text-2:         #7a98bb;
+  --t-text-3:         #364a5e;
+
+  /* Borders */
+  --t-border:         rgba(46,249,196,0.1);
+  --t-border-dim:     rgba(255,255,255,0.055);
+  --t-border-hover:   rgba(46,249,196,0.3);
+
+  /* Misc */
+  --t-font:           'Source Code Pro', monospace;
+  --t-radius:         6px;
+  --t-shadow:         0 8px 32px rgba(0,0,0,0.55);
+  --t-glow:           0 0 12px rgba(46,249,196,0.2);
+
+  /* HUD variables (consumed by ugv_hud.css) */
+  --hud-green:        var(--t-primary);
+  --hud-orange:       var(--t-warn);
+  --hud-red:          var(--t-danger);
+  --hud-bg:           rgba(4,8,16,0.92);
+  --hud-border:       var(--t-primary-border);
+  --tab-active:       var(--t-primary);
+}
+
+/* ── Base overrides ─────────────────────────────────────────────── */
+body {
+  background-color: var(--t-bg-0) !important;
+  color: var(--t-text-1) !important;
+  font-family: var(--t-font) !important;
+}
+
+/* ── Subtle grid mesh background (CSS-only, near-zero CPU) ──────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(46,249,196,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(46,249,196,0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: nexus-grid-drift 40s linear infinite;
+}
+
+@keyframes nexus-grid-drift {
+  0%   { background-position: 0 0; }
+  100% { background-position: 48px 48px; }
+}
+
+/* Disable animation if user prefers reduced motion or setting says off */
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
+body.no-animation::before { animation: none; }
+
+/* ── Layout containers ─────────────────────────────────────────── */
+main, .box1, .box2 { position: relative; z-index: 1; }
+
+.box_outline {
+  border-color: var(--t-border) !important;
+  background: transparent !important;
+}
+
+.section_video,
+.section_feed_ctrl {
+  background: rgba(7,11,20,0.6) !important;
+  backdrop-filter: blur(4px);
+}
+
+/* ── Heading / title styles ────────────────────────────────────── */
+.sc_title, h2.sc_title, h3 {
+  color: var(--t-primary) !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────── */
+.ctl_btn {
+  background: var(--t-bg-3) !important;
+  border: 1px solid var(--t-border-dim) !important;
+  color: var(--t-text-2) !important;
+  border-radius: var(--t-radius) !important;
+  transition: background 0.18s, border-color 0.18s, color 0.18s,
+              box-shadow 0.18s !important;
+}
+.ctl_btn:hover {
+  background: var(--t-primary-dim) !important;
+  border-color: var(--t-primary-border) !important;
+  color: var(--t-primary) !important;
+  box-shadow: var(--t-glow) !important;
+}
+.ctl_btn_active {
+  background: var(--t-primary-dim) !important;
+  border-color: var(--t-primary-border) !important;
+  color: var(--t-primary) !important;
+}
+
+.normal_btn {
+  background: var(--t-bg-3) !important;
+  border: 1px solid var(--t-border-dim) !important;
+  color: var(--t-text-2) !important;
+  border-radius: var(--t-radius) !important;
+  transition: background 0.18s, border-color 0.18s, color 0.18s !important;
+}
+.normal_btn:hover {
+  border-color: var(--t-primary-border) !important;
+  color: var(--t-primary) !important;
+}
+
+/* Video ctrl buttons */
+.video_btn_record, .video_btn_capture, .video_btn_zoom,
+.video_btn_px { filter: brightness(0.8) hue-rotate(160deg); }
+
+/* ── Inputs ─────────────────────────────────────────────────────── */
+input[type="text"], input[type="number"], input[type="password"],
+select, textarea {
+  background: var(--t-bg-3) !important;
+  border: 1px solid var(--t-border-dim) !important;
+  color: var(--t-text-1) !important;
+  font-family: var(--t-font) !important;
+  border-radius: var(--t-radius) !important;
+  transition: border-color 0.18s, box-shadow 0.18s !important;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none !important;
+  border-color: var(--t-primary-border) !important;
+  box-shadow: 0 0 0 2px var(--t-primary-dim) !important;
+}
+
+/* ── Links ──────────────────────────────────────────────────────── */
+a { color: var(--t-primary); text-decoration: none; }
+a:hover { color: var(--t-secondary); }
+
+/* ── Control 9-grid ─────────────────────────────────────────────── */
+.ctl9_base {
+  filter: drop-shadow(0 0 8px rgba(46,249,196,0.08));
+}
+
+/* ── Audio drop zone ────────────────────────────────────────────── */
+.audio-drop {
+  border: 1px dashed var(--t-border-dim) !important;
+  color: var(--t-text-3) !important;
+  background: var(--t-bg-3) !important;
+}
+
+/* ── Tilt / Pan scale indicators ───────────────────────────────── */
+.tilt_pointer, .pan_pointer {
+  border-color: var(--t-primary) !important;
+}
+.tilt_scale, .pan_scale {
+  background: var(--t-border-dim) !important;
+}
+
+/* ── Scrollbars (Webkit) ────────────────────────────────────────── */
+::-webkit-scrollbar        { width: 5px; height: 5px; }
+::-webkit-scrollbar-track  { background: var(--t-bg-2); }
+::-webkit-scrollbar-thumb  { background: var(--t-border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--t-primary-border); }
+
+/* ── V3 Navigation bar ──────────────────────────────────────────── */
+#v3-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 16px;
+  background: rgba(4,8,16,0.9);
+  border-bottom: 1px solid var(--t-border);
+  backdrop-filter: blur(6px);
+  position: sticky;
+  top: 32px;
+  z-index: 99;
+  flex-shrink: 0;
+}
+.v3-nav-btn {
+  padding: 7px 14px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--t-text-2);
+  font-family: var(--t-font);
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: color 0.18s, border-color 0.18s;
+  white-space: nowrap;
+}
+.v3-nav-btn:hover {
+  color: var(--t-text-1);
+  text-decoration: none;
+}
+.v3-nav-btn.active,
+.v3-nav-btn[aria-current="page"] {
+  color: var(--t-primary);
+  border-bottom-color: var(--t-primary);
+}
+.v3-nav-sep {
+  width: 1px; height: 16px;
+  background: var(--t-border-dim);
+  margin: 0 4px;
+}
+.v3-nav-right { margin-left: auto; }
+
+/* ── Retractable control panel ──────────────────────────────────── */
+#panel-toggle-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px; height: 44px;
+  background: var(--t-bg-2);
+  border: 1px solid var(--t-border);
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+  color: var(--t-text-2);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: background 0.18s, color 0.18s;
+}
+#panel-toggle-btn:hover { background: var(--t-bg-3); color: var(--t-primary); }
+
+/* Panel collapsed state */
+.box1 { transition: none; }
+.section_feed_ctrl {
+  transition: width 0.28s cubic-bezier(.4,0,.2,1),
+              opacity 0.28s ease,
+              min-width 0.28s ease;
+  overflow: hidden;
+  min-width: 200px;
+}
+.section_feed_ctrl.panel-collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+  padding: 0 !important;
+  border-left: none !important;
+}
+
+/* ── Mode cards in nexus style ──────────────────────────────────── */
+.mode-card {
+  background: var(--t-bg-card) !important;
+  border-color: var(--t-border-dim) !important;
+  border-radius: var(--t-radius) !important;
+}
+.mode-card h3 { color: var(--t-primary) !important; }
+
+/* ── Toast overrides ────────────────────────────────────────────── */
+.ugv-toast {
+  background: rgba(7,11,20,0.97) !important;
+  border-color: var(--t-border-dim) !important;
+  border-left-color: var(--t-primary) !important;
+}
+.ugv-toast.t-warn  { border-left-color: var(--t-warn) !important; }
+.ugv-toast.t-error { border-left-color: var(--t-danger) !important; }
+.ugv-toast.t-info  { border-left-color: var(--t-info) !important; }
+
+/* ── V2 topbar in nexus colours ─────────────────────────────────── */
+#v2-topbar {
+  background: rgba(4,8,16,0.95) !important;
+  border-bottom-color: var(--t-border) !important;
+}
+#v2-admin-link:hover  { color: var(--t-primary) !important; }
+#v2-logout-link:hover { color: var(--t-danger) !important; }
+
+/* ── Remote / media pages common layout ─────────────────────────── */
+.nx-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 20px;
+}
+.nx-section {
+  background: var(--t-bg-card);
+  border: 1px solid var(--t-border);
+  border-radius: var(--t-radius);
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  backdrop-filter: blur(4px);
+}
+.nx-section-title {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--t-primary);
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--t-border);
+}
+.nx-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.nx-label { color: var(--t-text-2); min-width: 120px; }
+.nx-value { color: var(--t-text-1); font-variant-numeric: tabular-nums; }
+.nx-badge {
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  font-weight: bold;
+  border: 1px solid currentColor;
+}
+.nx-badge-ok      { color: var(--t-primary); }
+.nx-badge-warn    { color: var(--t-warn); }
+.nx-badge-err     { color: var(--t-danger); }
+.nx-badge-off     { color: var(--t-text-3); }
+.nx-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--t-primary-border);
+  border-radius: var(--t-radius);
+  background: none;
+  color: var(--t-primary);
+  font-family: var(--t-font);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+.nx-btn:hover { background: var(--t-primary-dim); }
+.nx-btn.danger { border-color: rgba(240,78,106,0.3); color: var(--t-danger); }
+.nx-btn.danger:hover { background: var(--t-danger-dim); }
+.nx-btn.secondary { border-color: var(--t-secondary-border); color: var(--t-secondary); }
+.nx-btn.secondary:hover { background: var(--t-secondary-dim); }
+.nx-input {
+  flex: 1;
+  background: var(--t-bg-3);
+  border: 1px solid var(--t-border-dim);
+  border-radius: var(--t-radius);
+  color: var(--t-text-1);
+  font-family: var(--t-font);
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.nx-input:focus {
+  outline: none;
+  border-color: var(--t-primary-border);
+  box-shadow: 0 0 0 2px var(--t-primary-dim);
+}
+.nx-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.nx-table th {
+  text-align: left;
+  color: var(--t-text-2);
+  font-weight: normal;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--t-border-dim);
+  letter-spacing: 0.05em;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.nx-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  color: var(--t-text-1);
+  font-variant-numeric: tabular-nums;
+}
+.nx-table tr:hover td { background: rgba(46,249,196,0.03); }
+
+/* ── Photo / video gallery ──────────────────────────────────────── */
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.media-card {
+  background: var(--t-bg-3);
+  border: 1px solid var(--t-border-dim);
+  border-radius: var(--t-radius);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+.media-card:hover {
+  border-color: var(--t-primary-border);
+  box-shadow: var(--t-glow);
+}
+.media-card img { width: 100%; height: 120px; object-fit: cover; display: block; }
+.media-card-info {
+  padding: 6px 8px;
+  font-size: 10px;
+  color: var(--t-text-2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.media-card-del {
+  background: none;
+  border: none;
+  color: var(--t-text-3);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px;
+  transition: color 0.18s;
+}
+.media-card-del:hover { color: var(--t-danger); }

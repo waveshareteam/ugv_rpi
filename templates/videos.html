@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>UGV — Videos</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./ugv_hud.css">
+  <link rel="stylesheet" href="./themes/nexus.css" id="v3-theme-css">
+</head>
+<body>
+  <div id="v2-topbar">
+    <div id="v2-topbar-left">
+      <span style="color:var(--t-primary);font-size:13px;letter-spacing:.1em;">⬡ UGV</span>
+    </div>
+    <div id="v2-topbar-right">
+      <span id="v2-user-info" style="color:var(--t-text-2);font-size:11px;"></span>
+      <a href="/auth/logout" style="color:var(--t-text-2);font-size:10px;padding:2px 8px;border:1px solid var(--t-border-dim);border-radius:3px;text-decoration:none;">LOGOUT</a>
+    </div>
+  </div>
+
+  <div id="v3-nav">
+    <a class="v3-nav-btn" href="/">PILOT</a>
+    <div class="v3-nav-sep"></div>
+    <a class="v3-nav-btn" href="/remote">REMOTE</a>
+    <a class="v3-nav-btn" href="/photos">PHOTOS</a>
+    <a class="v3-nav-btn active" href="/videos" aria-current="page">VIDEOS</a>
+    <div class="v3-nav-sep"></div>
+    <a class="v3-nav-btn v3-nav-admin" href="/admin">ADMIN</a>
+  </div>
+
+  <div class="nx-page">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h1 style="font-size:16px;color:var(--t-primary);letter-spacing:.12em;margin:0;">
+        VIDEO FILES <span id="video-count" style="font-size:12px;color:var(--t-text-2);">({{ videos|length }})</span>
+      </h1>
+    </div>
+
+    {% if videos %}
+    <div class="media-grid" id="video-grid">
+      {% for video in videos %}
+      <div class="media-card" id="vcard-{{ loop.index }}">
+        <div style="width:100%;height:120px;background:var(--t-bg-3);display:flex;
+                    align-items:center;justify-content:center;cursor:pointer;position:relative;"
+             onclick="openVideo('{{ video }}')">
+          <span style="font-size:32px;">▶</span>
+          <span style="position:absolute;bottom:6px;right:8px;font-size:9px;
+                       color:var(--t-text-3);">.mp4</span>
+        </div>
+        <div class="media-card-info">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px;"
+                title="{{ video }}">{{ video }}</span>
+          <button class="media-card-del" onclick="deleteVideo('{{ video }}', {{ loop.index }})"
+                  title="Delete">✕</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="nx-section" style="text-align:center;padding:40px;">
+      <div style="font-size:32px;margin-bottom:12px;">🎥</div>
+      <div style="color:var(--t-text-2);">No videos yet. Use the robot controls to record.</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Video player overlay -->
+  <div id="video-overlay" onclick="closeVideo()"
+       style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;
+              align-items:center;justify-content:center;cursor:zoom-out;flex-direction:column;gap:12px;">
+    <video id="video-player" controls style="max-width:92vw;max-height:85vh;border-radius:6px;"
+           onclick="event.stopPropagation()"></video>
+    <button onclick="closeVideo()"
+            style="background:none;border:1px solid var(--t-border-dim);color:var(--t-text-2);
+                   padding:6px 20px;border-radius:4px;cursor:pointer;font-family:monospace;">
+      Close
+    </button>
+  </div>
+
+  <div id="ugv-toasts"></div>
+  <script src="./jquery-3.7.1.min.js"></script>
+  <script src="./ugv_hud.js"></script>
+  <script>
+    const t = localStorage.getItem("ugv-theme") || "nexus";
+    const link = document.getElementById("v3-theme-css");
+    if (link) link.href = "/themes/" + t + ".css";
+
+    fetch("/auth/me").then(r=>r.json()).then(d => {
+      if (d.authenticated) {
+        const info = document.getElementById("v2-user-info");
+        if (info) info.textContent = d.username + " (" + d.role + ")";
+        const admin = document.querySelector(".v3-nav-admin");
+        if (admin && d.role !== "admin") admin.style.display = "none";
+      }
+    }).catch(()=>{});
+
+    window.openVideo = function(name) {
+      const ov = document.getElementById("video-overlay");
+      document.getElementById("video-player").src = "/videos/" + name;
+      ov.style.display = "flex";
+    };
+    window.closeVideo = function() {
+      const ov = document.getElementById("video-overlay");
+      ov.style.display = "none";
+      document.getElementById("video-player").pause();
+      document.getElementById("video-player").src = "";
+    };
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape") closeVideo();
+    });
+
+    window.deleteVideo = function(name, idx) {
+      if (!confirm("Delete " + name + "?")) return;
+      const data = new FormData();
+      data.append("filename", name);
+      fetch("/delete_video", {method:"POST", body:data})
+        .then(r=>r.json())
+        .then(d => {
+          if (d.success) {
+            const card = document.getElementById("vcard-" + idx);
+            if (card) card.remove();
+            ugvToast && ugvToast("Video deleted", "warn", 2500);
+            const cnt = document.getElementById("video-count");
+            if (cnt) cnt.textContent = "(" + document.querySelectorAll(".media-card").length + ")";
+          } else {
+            ugvToast && ugvToast("Delete failed", "error");
+          }
+        }).catch(() => ugvToast && ugvToast("Error", "error"));
+    };
+  </script>
+</body>
+</html>

@@ -1,12 +1,12 @@
 {
-  "_comment": "UGV V2 settings — edit here or via POST /api/v2/settings",
+  "_comment": "UGV V3 settings — edit here or via POST /api/v2/settings",
   "auth": {
-    "enabled": false,
+    "enabled": true,
     "session_lifetime_hours": 12,
     "public_paths": ["/auth/login", "/auth/logout", "/video_feed", "/static/", "/themes/"]
   },
   "theme": {
-    "default": "dark",
+    "default": "nexus",
     "allow_user_preference": true
   },
   "robot": {
@@ -29,5 +29,14 @@
   "logging": {
     "level": "INFO",
     "max_events": 200
+  },
+  "remote": {
+    "zerotier": { "enabled": true },
+    "wireguard": { "enabled": true },
+    "cellular":  { "enabled": true }
+  },
+  "ui": {
+    "controls_collapsed_default": false,
+    "animation_enabled": true
   }
 }

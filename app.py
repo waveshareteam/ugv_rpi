@@ -50,6 +50,7 @@ import os_info
 import ugv_api
 from ugv_logger import get_logger
 from routes.zerotier import zt_bp
+from routes.remote   import remote_bp
 
 # V2 services
 from services.auth     import auth_bp, init_db as _auth_init_db, \
@@ -106,6 +107,9 @@ app.register_blueprint(ugv_api.ugv_api)
 
 # Register ZeroTier management routes
 app.register_blueprint(zt_bp)
+
+# V3: Remote Access routes (ZeroTier, WireGuard, cellular, interfaces)
+app.register_blueprint(remote_bp)
 
 # ── V2: Auth blueprint ─────────────────────────────────────────────────────
 _auth_init_db()
@@ -648,6 +652,38 @@ def cmd_on_boot():
 # ═══════════════════════════════════════════════════════════════════
 # V2 ROUTES
 # ═══════════════════════════════════════════════════════════════════
+
+# ── V3 page routes ─────────────────────────────────────────────────
+@app.route("/remote")
+@require_role("viewer")
+def remote_page():
+    return render_template("remote.html")
+
+
+@app.route("/photos")
+@require_role("viewer")
+def photos_page():
+    photos = sorted(
+        os.listdir(thisPath + "/templates/pictures"),
+        key=lambda x: os.path.getmtime(
+            os.path.join(thisPath + "/templates/pictures", x)),
+        reverse=True,
+    )
+    return render_template("photos.html", photos=photos)
+
+
+@app.route("/videos")
+@require_role("viewer")
+def videos_page():
+    vids = sorted(
+        [f for f in os.listdir(thisPath + "/templates/videos/")
+         if f.endswith(".mp4")],
+        key=lambda x: os.path.getctime(
+            os.path.join(thisPath + "/templates/videos/", x)),
+        reverse=True,
+    )
+    return render_template("videos.html", videos=vids)
+
 
 # ── Admin dashboard ────────────────────────────────────────────────
 @app.route("/admin")
