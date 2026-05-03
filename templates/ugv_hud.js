@@ -175,14 +175,17 @@
         if (stopBtn) stopBtn.classList.toggle("visible", running);
 
         // HUD mode badge
+        const label = _ROUTINE_LABELS[state] || state.toUpperCase();
         if (running) {
           const cls = state === "sentinel" ? "mode-sentinel"
                     : state === "follow"   ? "mode-follow"
                     : "mode-auto";
-          setHudMode((_ROUTINE_LABELS[state] || state).replace(/[^\w ]/g, "").trim(), cls);
+          setHudMode(label.replace(/[^\w ]/g, "").trim(), cls);
         } else {
           setHudMode("MANUAL", "mode-manual");
         }
+        // V2 topbar badge
+        v2UpdateRoutineBadge(running, label.replace(/[^\w ]/g, "").trim());
       })
       .catch(() => {});
   }
@@ -381,6 +384,71 @@
     };
   }
 
+  /* ─── V2 Theme system ────────────────────────────────────────────── */
+  const THEMES = ["dark", "cyberpunk", "military", "terminal"];
+
+  window.v2SetTheme = function (name) {
+    if (!THEMES.includes(name)) return;
+
+    // Swap CSS link
+    const link = document.getElementById("v2-theme-css");
+    if (link) link.href = `/themes/${name}.css`;
+
+    // Swap body class
+    document.body.className = document.body.className
+      .replace(/\btheme-\S+/g, "").trim();
+    document.body.classList.add("theme-" + name);
+
+    // Update active button
+    document.querySelectorAll(".v2-theme-btn").forEach(b => {
+      b.classList.toggle("v2-theme-active", b.dataset.theme === name);
+    });
+
+    // Persist locally + to backend
+    localStorage.setItem("ugv-theme", name);
+    fetch("/api/v2/theme", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }).catch(() => {});
+    ugvToast(`Theme: ${name.toUpperCase()}`, "info", 1800);
+  };
+
+  function v2InitTheme() {
+    const saved = localStorage.getItem("ugv-theme") || "dark";
+    v2SetTheme(saved);
+  }
+
+  /* ─── V2 User info ────────────────────────────────────────────── */
+  function v2LoadUser() {
+    fetch("/auth/me")
+      .then(r => r.json())
+      .then(d => {
+        const info     = document.getElementById("v2-user-info");
+        const adminLnk = document.getElementById("v2-admin-link");
+        const logoutLnk= document.getElementById("v2-logout-link");
+        if (d.authenticated) {
+          if (info)     info.textContent = `${d.username} (${d.role})`;
+          if (logoutLnk) logoutLnk.style.display = "inline";
+          if (adminLnk && d.role === "admin") adminLnk.style.display = "inline";
+        }
+      })
+      .catch(() => {});
+  }
+
+  /* ─── V2 Routine badge in topbar ─────────────────────────────── */
+  function v2UpdateRoutineBadge(running, label) {
+    const badge = document.getElementById("v2-routine-badge");
+    if (!badge) return;
+    if (running) {
+      badge.textContent  = `● ${label}`;
+      badge.className    = "v2-badge v2-badge-running";
+    } else {
+      badge.textContent  = "● IDLE";
+      badge.className    = "v2-badge v2-badge-idle";
+    }
+  }
+
   /* ─── Init ────────────────────────────────────────────────────── */
   function init() {
     // Gauges (containers injected into HUD in index.html)
@@ -389,6 +457,10 @@
 
     hookSocketUpdate();
     addToastHooks();
+
+    // V2 init
+    v2InitTheme();
+    v2LoadUser();
 
     startRoutinePolling();
 

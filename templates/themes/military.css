@@ -1,0 +1,45 @@
+/* ═══════════════════════════════════════════
+   UGV Theme: MILITARY
+   Tactical green + amber on dark olive/black
+   ═══════════════════════════════════════════ */
+:root {
+  --t-primary:        #a6e03b;
+  --t-primary-dim:    rgba(166, 224, 59, 0.12);
+  --t-primary-border: rgba(166, 224, 59, 0.30);
+  --t-accent:         #f0b429;
+  --t-danger:         #d94f4f;
+  --t-warn:           #d98c29;
+  --t-info:           #5eb6c8;
+
+  --t-bg-0:  #050a00;
+  --t-bg-1:  #0d1507;
+  --t-bg-2:  #172010;
+  --t-bg-3:  #1f2c16;
+
+  --t-text-0: #e8f0c8;
+  --t-text-1: #b8c890;
+  --t-text-2: #708050;
+  --t-text-3: #405030;
+
+  --t-border: rgba(166, 224, 59, 0.12);
+  --t-shadow: 0 4px 20px rgba(0,0,0,0.7);
+
+  --t-font:   'Source Code Pro', 'Courier New', monospace;
+  --t-radius: 2px;
+
+  --hud-green:  var(--t-primary);
+  --hud-orange: var(--t-warn);
+  --hud-red:    var(--t-danger);
+  --hud-bg:     rgba(13,21,7,0.90);
+  --hud-border: var(--t-primary-border);
+}
+
+body.theme-military .ctl_btn_active,
+body.theme-military .ugv-tab-btn.ugv-tab-active {
+  color: var(--t-primary);
+}
+
+body.theme-military .section_video,
+body.theme-military .section_feed_ctrl {
+  border-color: rgba(166,224,59,0.15) !important;
+}

@@ -1,0 +1,52 @@
+/* ═══════════════════════════════════════════
+   UGV Theme: CYBERPUNK
+   Neon magenta + electric yellow on deep purple
+   ═══════════════════════════════════════════ */
+:root {
+  --t-primary:        #ff00ff;
+  --t-primary-dim:    rgba(255, 0, 255, 0.12);
+  --t-primary-border: rgba(255, 0, 255, 0.35);
+  --t-accent:         #ffee00;
+  --t-danger:         #ff3366;
+  --t-warn:           #ff9900;
+  --t-info:           #00e5ff;
+
+  --t-bg-0:  #0a0015;
+  --t-bg-1:  #110022;
+  --t-bg-2:  #1a0033;
+  --t-bg-3:  #240044;
+
+  --t-text-0: #ffffff;
+  --t-text-1: #e0c0ff;
+  --t-text-2: #aa80cc;
+  --t-text-3: #664488;
+
+  --t-border: rgba(255, 0, 255, 0.15);
+  --t-shadow: 0 4px 24px rgba(255,0,255,0.2);
+
+  --t-font:   'Source Code Pro', 'Courier New', monospace;
+  --t-radius: 3px;
+
+  --hud-green:  var(--t-primary);
+  --hud-orange: var(--t-warn);
+  --hud-red:    var(--t-danger);
+  --hud-bg:     rgba(17, 0, 34, 0.92);
+  --hud-border: var(--t-primary-border);
+}
+
+/* Cyberpunk glow on active buttons */
+body.theme-cyberpunk .ctl_btn_active,
+body.theme-cyberpunk .ugv-tab-btn.ugv-tab-active {
+  text-shadow: 0 0 8px var(--t-primary);
+  box-shadow:  0 0 10px var(--t-primary-dim);
+}
+
+body.theme-cyberpunk .ugv-toast {
+  border-left-color: var(--t-primary);
+  background: rgba(17,0,34,0.96);
+}
+
+body.theme-cyberpunk .section_video,
+body.theme-cyberpunk .section_feed_ctrl {
+  border-color: rgba(255,0,255,0.2) !important;
+}

@@ -1,0 +1,63 @@
+/* ═══════════════════════════════════════════
+   UGV Theme: TERMINAL
+   Classic green phosphor on pure black
+   ═══════════════════════════════════════════ */
+:root {
+  --t-primary:        #33ff33;
+  --t-primary-dim:    rgba(51, 255, 51, 0.10);
+  --t-primary-border: rgba(51, 255, 51, 0.25);
+  --t-accent:         #ffff33;
+  --t-danger:         #ff3333;
+  --t-warn:           #ff9933;
+  --t-info:           #33ffff;
+
+  --t-bg-0:  #000000;
+  --t-bg-1:  #030a03;
+  --t-bg-2:  #091409;
+  --t-bg-3:  #0f1f0f;
+
+  --t-text-0: #33ff33;
+  --t-text-1: #22cc22;
+  --t-text-2: #117711;
+  --t-text-3: #0a4a0a;
+
+  --t-border: rgba(51, 255, 51, 0.10);
+  --t-shadow: 0 4px 20px rgba(0,0,0,0.9);
+
+  --t-font:   'Courier New', monospace;
+  --t-radius: 0px;
+
+  --hud-green:  var(--t-primary);
+  --hud-orange: var(--t-warn);
+  --hud-red:    var(--t-danger);
+  --hud-bg:     rgba(0,0,0,0.92);
+  --hud-border: var(--t-primary-border);
+}
+
+/* Terminal scanline effect */
+body.theme-terminal::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.06) 2px,
+    rgba(0,0,0,0.06) 4px
+  );
+  pointer-events: none;
+  z-index: 9998;
+}
+
+body.theme-terminal .ctl_btn_active,
+body.theme-terminal .ugv-tab-btn.ugv-tab-active {
+  color: var(--t-primary);
+  text-shadow: 0 0 6px var(--t-primary);
+}
+
+body.theme-terminal .section_video,
+body.theme-terminal .section_feed_ctrl {
+  border-color: rgba(51,255,51,0.15) !important;
+}

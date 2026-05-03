@@ -3,6 +3,77 @@
    Appended to existing style.css via <link> in index.html
    ═══════════════════════════════════════════════════════════════════ */
 
+/* ── V2 Top bar ───────────────────────────────────────────────────── */
+#v2-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 16px;
+  background: var(--t-bg-1, #1E1E20);
+  border-bottom: 1px solid var(--t-border, rgba(255,255,255,0.07));
+  font-size: 11px;
+  font-family: var(--t-font, 'Source Code Pro', monospace);
+  flex-shrink: 0;
+  min-height: 32px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+#v2-topbar-left  { display: flex; align-items: center; gap: 10px; }
+#v2-topbar-center{ display: flex; align-items: center; gap: 8px; }
+#v2-topbar-right { display: flex; align-items: center; gap: 10px; }
+
+.v2-badge {
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  font-weight: bold;
+}
+.v2-badge-idle    { color: var(--t-text-3, #555); }
+.v2-badge-running { color: var(--t-primary, #4FF5C0); animation: pulse-dot 1.5s infinite; }
+.v2-badge-warn    { color: var(--t-warn, #f5a623); }
+
+#v2-theme-label { color: var(--t-text-2, #999); cursor: default; }
+#v2-theme-picker { display: flex; gap: 4px; }
+.v2-theme-btn {
+  padding: 3px 8px;
+  border: 1px solid var(--t-border, rgba(255,255,255,0.08));
+  border-radius: 3px;
+  background: none;
+  color: var(--t-text-2, #999);
+  font-size: 10px;
+  font-family: inherit;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: color 0.2s, border-color 0.2s;
+}
+.v2-theme-btn:hover      { color: var(--t-text-1, #d8d8d8); }
+.v2-theme-btn.v2-theme-active {
+  color: var(--t-primary, #4FF5C0);
+  border-color: var(--t-primary-border, rgba(79,245,192,0.3));
+}
+
+#v2-user-info  { color: var(--t-text-2, #999); }
+#v2-admin-link,
+#v2-logout-link {
+  color: var(--t-text-2, #888);
+  text-decoration: none;
+  font-size: 10px;
+  padding: 2px 8px;
+  border: 1px solid var(--t-border, rgba(255,255,255,0.08));
+  border-radius: 3px;
+  transition: color 0.2s;
+}
+#v2-admin-link:hover  { color: var(--t-primary, #4FF5C0); }
+#v2-logout-link:hover { color: var(--t-danger, #e74c3c); }
+
+@media (max-width: 767px) {
+  #v2-theme-picker { display: none; }
+  #v2-topbar { padding: 4px 10px; }
+}
+
 /* ── Variables (override if needed) ─────────────────────────────── */
 :root {
   --hud-green:   #4FF5C0;

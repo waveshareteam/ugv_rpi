@@ -42,12 +42,23 @@ import uuid
 import asyncio
 import time
 import logging
+import os
+import secrets as _secrets
 import cv_ctrl
 import audio_ctrl
 import os_info
 import ugv_api
 from ugv_logger import get_logger
 from routes.zerotier import zt_bp
+
+# V2 services
+from services.auth     import auth_bp, init_db as _auth_init_db, \
+                              list_users, create_user, delete_user, \
+                              get_current_user, require_role
+from services.settings import get as _setting, set_key as _set_key, \
+                              all_settings, update_bulk
+from services.theme    import VALID_THEMES, DEFAULT_THEME, list_themes
+from mcp.server        import start_mcp_server, list_tools_schema, call_tool
 
 log = get_logger("app")
 
@@ -57,8 +68,24 @@ si = os_info.SystemInfo()
 
 # Create a Flask app instance
 app = Flask(__name__)
-# log = logging.getLogger('werkzeug')
-# log.disabled = True
+
+# ── V2: stable secret key (persisted so sessions survive restarts) ────────────
+_KEY_FILE = os.path.join(thisPath, "config", ".secret_key")
+os.makedirs(os.path.join(thisPath, "config"), exist_ok=True)
+if os.path.exists(_KEY_FILE):
+    with open(_KEY_FILE, "rb") as _kf:
+        app.secret_key = _kf.read()
+else:
+    app.secret_key = _secrets.token_bytes(32)
+    with open(_KEY_FILE, "wb") as _kf:
+        _kf.write(app.secret_key)
+    log.info("Generated new secret key → config/.secret_key")
+
+from datetime import timedelta
+app.permanent_session_lifetime = timedelta(
+    hours=_setting("auth.session_lifetime_hours", 12)
+)
+
 socketio = SocketIO(app)
 
 # Set to keep track of RTCPeerConnection instances
@@ -80,7 +107,27 @@ app.register_blueprint(ugv_api.ugv_api)
 # Register ZeroTier management routes
 app.register_blueprint(zt_bp)
 
-log.info("UGV Flask app initialized — blueprints registered")
+# ── V2: Auth blueprint ─────────────────────────────────────────────────────
+_auth_init_db()
+app.register_blueprint(auth_bp)
+
+# ── V2: Before-request auth guard (disabled by default) ───────────────────
+_PUBLIC_PATHS = ["/auth/", "/video_feed", "/static/", "/themes/"]
+
+@app.before_request
+def _v2_auth_guard():
+    if not _setting("auth.enabled", False):
+        return   # V1 behaviour: open access
+    if any(request.path.startswith(p) for p in _PUBLIC_PATHS):
+        return
+    user = get_current_user()
+    if user:
+        return
+    if request.is_json or request.path.startswith("/api/"):
+        return jsonify({"error": "Unauthorized", "login": "/auth/login"}), 401
+    return redirect(url_for("auth.login", next=request.path))
+
+log.info("UGV Flask V2 initialized — auth=%s", _setting("auth.enabled", False))
 
 cmd_actions = {
     f['code']['zoom_x1']: lambda: cvf.scale_ctrl(1),
@@ -598,6 +645,88 @@ def cmd_on_boot():
 
 
 
+# ═══════════════════════════════════════════════════════════════════
+# V2 ROUTES
+# ═══════════════════════════════════════════════════════════════════
+
+# ── Admin dashboard ────────────────────────────────────────────────
+@app.route("/admin")
+@require_role("admin")
+def admin_dashboard():
+    return render_template("admin.html")
+
+
+# ── V2 Settings API ────────────────────────────────────────────────
+@app.route("/api/v2/settings", methods=["GET"])
+def v2_get_settings():
+    return jsonify(all_settings())
+
+
+@app.route("/api/v2/settings", methods=["POST"])
+@require_role("admin")
+def v2_post_settings():
+    data = request.get_json() or {}
+    results = update_bulk(data)
+    return jsonify({"ok": True, "results": results})
+
+
+# ── Theme API ──────────────────────────────────────────────────────
+@app.route("/api/v2/theme", methods=["GET"])
+def v2_get_theme():
+    return jsonify({"themes": list_themes(), "default": _setting("theme.default", DEFAULT_THEME)})
+
+
+@app.route("/api/v2/theme", methods=["POST"])
+def v2_set_theme():
+    data = request.get_json() or {}
+    name = data.get("name", "dark").lower()
+    if name not in VALID_THEMES:
+        return jsonify({"ok": False, "error": f"Unknown theme. Valid: {list_themes()}"}), 400
+    _set_key("theme.default", name)
+    return jsonify({"ok": True, "name": name})
+
+
+# ── Admin user management API ──────────────────────────────────────
+@app.route("/api/v2/admin/users", methods=["GET"])
+@require_role("admin")
+def v2_list_users():
+    return jsonify({"users": list_users()})
+
+
+@app.route("/api/v2/admin/users", methods=["POST"])
+@require_role("admin")
+def v2_create_user():
+    d = request.get_json() or {}
+    return jsonify(create_user(d.get("username",""), d.get("password",""), d.get("role","viewer")))
+
+
+@app.route("/api/v2/admin/users/<username>", methods=["DELETE"])
+@require_role("admin")
+def v2_delete_user(username):
+    return jsonify(delete_user(username))
+
+
+# ── MCP REST fallback (/mcp/rpc) ───────────────────────────────────
+@app.route("/mcp/tools", methods=["GET"])
+def mcp_list_tools():
+    return jsonify({"tools": list_tools_schema()})
+
+
+@app.route("/mcp/rpc", methods=["POST"])
+def mcp_rpc():
+    """
+    JSON-RPC-style MCP tool call.
+    Body: {"tool": "move_robot", "params": {"direction": "forward", "speed": 0.3}}
+    """
+    d = request.get_json() or {}
+    tool   = d.get("tool", "")
+    params = d.get("params", {})
+    if not tool:
+        return jsonify({"error": "Missing 'tool' field"}), 400
+    result = call_tool(tool, params)
+    return jsonify({"tool": tool, "result": result})
+
+
 # Run the Flask app
 if __name__ == "__main__":
     # lights off
@@ -624,6 +753,13 @@ if __name__ == "__main__":
     # base data update
     base_update_thread = threading.Thread(target=base_data_loop, daemon=True)
     base_update_thread.start()
+
+    # V2: start MCP server if enabled
+    if _setting("mcp.enabled", True):
+        start_mcp_server(
+            port       = _setting("mcp.port", 5001),
+            flask_base = _setting("mcp.flask_base", "http://localhost:5000"),
+        )
 
     # lights off
     base.lights_ctrl(0, 0)

@@ -1,0 +1,33 @@
+{
+  "_comment": "UGV V2 settings — edit here or via POST /api/v2/settings",
+  "auth": {
+    "enabled": false,
+    "session_lifetime_hours": 12,
+    "public_paths": ["/auth/login", "/auth/logout", "/video_feed", "/static/", "/themes/"]
+  },
+  "theme": {
+    "default": "dark",
+    "allow_user_preference": true
+  },
+  "robot": {
+    "default_speed": 0.3,
+    "max_speed": 0.8,
+    "safety_timeout_s": 5.0,
+    "min_voltage_v": 10.2,
+    "max_cpu_temp_c": 82.0
+  },
+  "mcp": {
+    "enabled": true,
+    "port": 5001,
+    "flask_base": "http://localhost:5000",
+    "require_auth": false
+  },
+  "cv": {
+    "default_mode": "none",
+    "default_reaction": "none"
+  },
+  "logging": {
+    "level": "INFO",
+    "max_events": 200
+  }
+}

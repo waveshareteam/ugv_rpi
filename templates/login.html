@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>UGV — Login</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./themes/dark.css" id="theme-css">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background: var(--t-bg-0, #0f0f11);
+      font-family: var(--t-font, 'Source Code Pro', monospace);
+    }
+
+    .login-card {
+      width: 360px;
+      background: var(--t-bg-1, #1E1E20);
+      border: 1px solid var(--t-primary-border, rgba(79,245,192,0.25));
+      border-radius: var(--t-radius, 6px);
+      padding: 36px 32px;
+      box-shadow: var(--t-shadow, 0 4px 24px rgba(0,0,0,0.5));
+    }
+
+    .login-logo {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .login-logo h1 {
+      font-size: 22px;
+      color: var(--t-primary, #4FF5C0);
+      margin: 0 0 4px;
+      letter-spacing: 0.12em;
+    }
+    .login-logo p {
+      font-size: 11px;
+      color: var(--t-text-2, #999);
+      margin: 0;
+      letter-spacing: 0.08em;
+    }
+
+    .login-field { margin-bottom: 16px; }
+    .login-field label {
+      display: block;
+      font-size: 11px;
+      color: var(--t-text-2, #999);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .login-field input {
+      width: 100%;
+      box-sizing: border-box;
+      background: var(--t-bg-2, #26262a);
+      border: 1px solid var(--t-border, rgba(255,255,255,0.08));
+      border-radius: 4px;
+      color: var(--t-text-1, #d8d8d8);
+      font-size: 13px;
+      font-family: inherit;
+      padding: 9px 12px;
+      transition: border-color 0.2s;
+    }
+    .login-field input:focus {
+      outline: none;
+      border-color: var(--t-primary, #4FF5C0);
+    }
+
+    .login-btn {
+      width: 100%;
+      padding: 10px;
+      margin-top: 8px;
+      background: none;
+      border: 1px solid var(--t-primary, #4FF5C0);
+      border-radius: 4px;
+      color: var(--t-primary, #4FF5C0);
+      font-size: 13px;
+      font-family: inherit;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .login-btn:hover { background: var(--t-primary-dim, rgba(79,245,192,0.12)); }
+
+    .login-error {
+      background: rgba(231,76,60,0.12);
+      border: 1px solid rgba(231,76,60,0.3);
+      border-radius: 4px;
+      color: #e74c3c;
+      font-size: 12px;
+      padding: 8px 12px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .login-error.visible { display: block; }
+
+    .login-footer {
+      margin-top: 24px;
+      text-align: center;
+      font-size: 10px;
+      color: var(--t-text-3, #555);
+    }
+
+    /* Flash messages from Flask */
+    .flash { margin-bottom: 14px; }
+    .flash-error {
+      background: rgba(231,76,60,0.12);
+      border: 1px solid rgba(231,76,60,0.3);
+      border-radius: 4px;
+      color: #e74c3c;
+      font-size: 12px;
+      padding: 8px 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-logo">
+      <h1>⬡ UGV CONTROL</h1>
+      <p>WAVESHARE ROBOT PLATFORM v2</p>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, msg in messages %}
+        <div class="flash">
+          <div class="flash-{{ category }}">{{ msg }}</div>
+        </div>
+      {% endfor %}
+    {% endwith %}
+
+    <form method="POST" action="/auth/login{% if request.args.get('next') %}?next={{ request.args.get('next') }}{% endif %}">
+      <div class="login-field">
+        <label>Username</label>
+        <input type="text" name="username" autocomplete="username"
+               autofocus required placeholder="admin">
+      </div>
+      <div class="login-field">
+        <label>Password</label>
+        <input type="password" name="password" autocomplete="current-password"
+               required placeholder="••••••••">
+      </div>
+      <button type="submit" class="login-btn">LOGIN →</button>
+    </form>
+
+    <div class="login-footer">
+      UGV Waveshare &nbsp;|&nbsp; Secure Access
+    </div>
+  </div>
+</body>
+</html>

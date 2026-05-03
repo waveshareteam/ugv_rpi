@@ -1,0 +1,37 @@
+/* ═══════════════════════════════════════════
+   UGV Theme: DARK (default)
+   Sets CSS custom properties used by ugv_hud.css
+   and V2 UI elements. Existing style.css untouched.
+   ═══════════════════════════════════════════ */
+:root {
+  --t-primary:        #4FF5C0;
+  --t-primary-dim:    rgba(79, 245, 192, 0.15);
+  --t-primary-border: rgba(79, 245, 192, 0.30);
+  --t-accent:         #f5bd5f;
+  --t-danger:         #e74c3c;
+  --t-warn:           #f5a623;
+  --t-info:           #60a5fa;
+
+  --t-bg-0:  #0f0f11;
+  --t-bg-1:  #1E1E20;
+  --t-bg-2:  #26262a;
+  --t-bg-3:  #30303a;
+
+  --t-text-0: #ffffff;
+  --t-text-1: #d8d8d8;
+  --t-text-2: #999999;
+  --t-text-3: #555555;
+
+  --t-border: rgba(255,255,255,0.08);
+  --t-shadow: 0 4px 24px rgba(0,0,0,0.5);
+
+  --t-font:   'Source Code Pro', 'Courier New', monospace;
+  --t-radius: 6px;
+
+  /* HUD alias (used by ugv_hud.css vars) */
+  --hud-green:  var(--t-primary);
+  --hud-orange: var(--t-warn);
+  --hud-red:    var(--t-danger);
+  --hud-bg:     rgba(30,30,32,0.88);
+  --hud-border: var(--t-primary-border);
+}

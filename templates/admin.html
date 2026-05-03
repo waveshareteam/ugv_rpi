@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>UGV Admin</title>
+  <script src="./jquery-3.7.1.min.js"></script>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./ugv_hud.css">
+  <link rel="stylesheet" href="./themes/dark.css" id="theme-css">
+  <style>
+    body { background: var(--t-bg-0, #0f0f11); }
+
+    .admin-wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 16px;
+      font-family: var(--t-font, 'Source Code Pro', monospace);
+    }
+
+    /* ── Top bar ── */
+    .admin-topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--t-border, rgba(255,255,255,0.08));
+    }
+    .admin-topbar h1 {
+      font-size: 16px;
+      color: var(--t-primary, #4FF5C0);
+      margin: 0;
+      letter-spacing: 0.1em;
+      flex: 1;
+    }
+    .admin-topbar a {
+      font-size: 11px;
+      color: var(--t-text-2, #999);
+      text-decoration: none;
+      padding: 5px 12px;
+      border: 1px solid var(--t-border, rgba(255,255,255,0.08));
+      border-radius: 4px;
+      transition: color 0.2s;
+    }
+    .admin-topbar a:hover { color: var(--t-text-1, #d8d8d8); }
+
+    /* ── Grid ── */
+    .admin-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 768px) { .admin-grid { grid-template-columns: 1fr; } }
+
+    /* ── Panels ── */
+    .admin-panel {
+      background: var(--t-bg-1, #1E1E20);
+      border: 1px solid var(--t-border, rgba(255,255,255,0.08));
+      border-radius: var(--t-radius, 6px);
+      padding: 18px 20px;
+    }
+    .admin-panel.full { grid-column: 1 / -1; }
+    .admin-panel h2 {
+      font-size: 12px;
+      color: var(--t-text-2, #999);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin: 0 0 14px;
+    }
+
+    /* ── Stat grid ── */
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--t-border, rgba(255,255,255,0.05));
+      font-size: 12px;
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: var(--t-text-2, #999); }
+    .stat-val   { color: var(--t-text-1, #d8d8d8); font-variant-numeric: tabular-nums; }
+    .stat-ok    { color: var(--t-primary, #4FF5C0); }
+    .stat-warn  { color: var(--t-warn, #f5a623); }
+    .stat-err   { color: var(--t-danger, #e74c3c); }
+
+    /* ── Users table ── */
+    .users-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .users-table th {
+      text-align: left;
+      color: var(--t-text-3, #555);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0 8px 8px 0;
+      border-bottom: 1px solid var(--t-border, rgba(255,255,255,0.08));
+    }
+    .users-table td {
+      padding: 7px 8px 7px 0;
+      color: var(--t-text-1, #d8d8d8);
+      border-bottom: 1px solid var(--t-border, rgba(255,255,255,0.04));
+      vertical-align: middle;
+    }
+    .role-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+    }
+    .role-admin    { background: rgba(231,76,60,0.15); color: #e74c3c; }
+    .role-operator { background: rgba(245,166,35,0.15); color: #f5a623; }
+    .role-viewer   { background: rgba(79,245,192,0.12); color: #4FF5C0; }
+
+    /* ── Add user form ── */
+    .add-user-form {
+      display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap;
+    }
+    .add-user-form input, .add-user-form select {
+      background: var(--t-bg-2, #26262a);
+      border: 1px solid var(--t-border, rgba(255,255,255,0.08));
+      border-radius: 4px;
+      color: var(--t-text-1, #d8d8d8);
+      font-size: 12px;
+      font-family: inherit;
+      padding: 6px 10px;
+    }
+    .add-user-form input:focus, .add-user-form select:focus {
+      outline: none;
+      border-color: var(--t-primary, #4FF5C0);
+    }
+    .add-user-form input { flex: 1; min-width: 100px; }
+
+    /* ── Action buttons ── */
+    .btn-sm {
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid;
+      background: none;
+      transition: background 0.2s;
+    }
+    .btn-primary { border-color: var(--t-primary-border, rgba(79,245,192,0.3)); color: var(--t-primary, #4FF5C0); }
+    .btn-primary:hover { background: var(--t-primary-dim, rgba(79,245,192,0.12)); }
+    .btn-danger { border-color: rgba(231,76,60,0.35); color: #e74c3c; }
+    .btn-danger:hover { background: rgba(231,76,60,0.1); }
+
+    /* ── Events list ── */
+    .event-list { list-style: none; padding: 0; margin: 0; max-height: 260px; overflow-y: auto; }
+    .event-list li {
+      display: flex; gap: 10px; padding: 4px 0;
+      border-bottom: 1px solid var(--t-border, rgba(255,255,255,0.04));
+      font-size: 11px;
+    }
+    .ev-t  { color: var(--t-text-3, #555); flex-shrink: 0; font-size: 10px; }
+    .ev-ty { color: var(--t-primary, #4FF5C0); min-width: 100px; flex-shrink: 0; }
+    .ev-d  { color: var(--t-text-2, #999); font-size: 10px; }
+
+    /* ── ZeroTier ── */
+    .zt-net { display: flex; gap: 10px; align-items: center; padding: 5px 0;
+              border-bottom: 1px solid var(--t-border, rgba(255,255,255,0.04));
+              font-size: 12px; }
+    .zt-online  { color: var(--t-primary, #4FF5C0); }
+    .zt-offline { color: var(--t-danger, #e74c3c); }
+  </style>
+</head>
+<body>
+<div class="admin-wrap">
+
+  <!-- Top bar -->
+  <div class="admin-topbar">
+    <h1>⬡ UGV ADMIN</h1>
+    <span id="admin-user-badge" style="font-size:11px;color:#888;"></span>
+    <a href="/">← Dashboard</a>
+    <a href="/auth/logout" style="color:#e74c3c;border-color:rgba(231,76,60,0.3);">Logout</a>
+  </div>
+
+  <div class="admin-grid">
+
+    <!-- System status -->
+    <div class="admin-panel">
+      <h2>System Status</h2>
+      <div id="sys-status">
+        <div class="stat-row"><span class="stat-label">CPU Load</span><span id="s-cpu" class="stat-val">—</span></div>
+        <div class="stat-row"><span class="stat-label">CPU Temp</span><span id="s-temp" class="stat-val">—</span></div>
+        <div class="stat-row"><span class="stat-label">RAM Usage</span><span id="s-ram" class="stat-val">—</span></div>
+        <div class="stat-row"><span class="stat-label">WiFi RSSI</span><span id="s-rssi" class="stat-val">—</span></div>
+        <div class="stat-row"><span class="stat-label">IP (wlan)</span><span id="s-ip" class="stat-val">—</span></div>
+        <div class="stat-row"><span class="stat-label">Voltage</span><span id="s-volt" class="stat-val">—</span></div>
+        <div class="stat-row"><span class="stat-label">CV Mode</span><span id="s-cv" class="stat-val">—</span></div>
+        <div class="stat-row"><span class="stat-label">Routine</span><span id="s-routine" class="stat-val">—</span></div>
+        <div class="stat-row"><span class="stat-label">Video FPS</span><span id="s-fps" class="stat-val">—</span></div>
+      </div>
+      <button class="btn-sm btn-primary" style="margin-top:12px" onclick="loadStatus()">↻ Refresh</button>
+    </div>
+
+    <!-- ZeroTier -->
+    <div class="admin-panel">
+      <h2>ZeroTier Network</h2>
+      <div id="zt-info">
+        <div class="stat-row"><span class="stat-label">Node ID</span><span id="zt-node" class="stat-val">—</span></div>
+        <div class="stat-row"><span class="stat-label">Status</span><span id="zt-status-txt" class="stat-val">—</span></div>
+      </div>
+      <div id="zt-net-list" style="margin-top:10px;"></div>
+      <button class="btn-sm btn-primary" style="margin-top:10px" onclick="loadZT()">↻ Refresh</button>
+    </div>
+
+    <!-- Users -->
+    <div class="admin-panel full">
+      <h2>User Management</h2>
+      <table class="users-table">
+        <thead>
+          <tr>
+            <th>Username</th><th>Role</th><th>Created</th><th>Last Login</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody"></tbody>
+      </table>
+      <div class="add-user-form">
+        <input type="text"     id="new-user"  placeholder="Username">
+        <input type="password" id="new-pass"  placeholder="Password">
+        <select id="new-role">
+          <option value="viewer">viewer</option>
+          <option value="operator">operator</option>
+          <option value="admin">admin</option>
+        </select>
+        <button class="btn-sm btn-primary" onclick="addUser()">+ Add User</button>
+      </div>
+    </div>
+
+    <!-- Events log -->
+    <div class="admin-panel full">
+      <h2>Event Log (last 40)</h2>
+      <ul class="event-list" id="event-list"></ul>
+      <button class="btn-sm btn-primary" style="margin-top:10px" onclick="loadEvents()">↻ Refresh</button>
+    </div>
+
+    <!-- Settings panel -->
+    <div class="admin-panel full">
+      <h2>V2 Settings</h2>
+      <div id="settings-display" style="font-size:12px;color:var(--t-text-2);white-space:pre-wrap;max-height:200px;overflow-y:auto;"></div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+        <label style="font-size:12px;color:#888;display:flex;align-items:center;gap:8px;">
+          Auth enabled:
+          <input type="checkbox" id="auth-enabled-cb">
+        </label>
+        <button class="btn-sm btn-primary" onclick="toggleAuth()">Save Auth Setting</button>
+        <button class="btn-sm btn-primary" onclick="loadSettings()">↻ Reload Settings</button>
+      </div>
+    </div>
+
+  </div><!-- /admin-grid -->
+</div><!-- /admin-wrap -->
+
+<script>
+const api = (path, opts) => fetch(path, opts).then(r => r.json()).catch(e => ({error: e.message}));
+
+/* ── System status ── */
+async function loadStatus() {
+  const d = await api('/api/ugv/status');
+  const s = d.system || {}, r = d.robot || {};
+  $('#s-cpu').text((s.cpu_load || 0).toFixed(1) + '%');
+  $('#s-temp').text((s.cpu_temp || 0).toFixed(1) + '°C').attr('class',
+    s.cpu_temp > 75 ? 'stat-val stat-err' : s.cpu_temp > 60 ? 'stat-val stat-warn' : 'stat-val stat-ok');
+  $('#s-ram').text((s.ram_usage || 0).toFixed(1) + '%');
+  $('#s-rssi').text((s.wifi_rssi || 0) + ' dBm');
+  $('#s-ip').text(s.wlan_ip || s.eth0_ip || '—');
+  $('#s-volt').text((r.voltage || 0).toFixed(1) + ' V').attr('class',
+    r.voltage < 10.5 ? 'stat-val stat-err' : r.voltage < 11.0 ? 'stat-val stat-warn' : 'stat-val stat-ok');
+  $('#s-cv').text(r.cv_mode || '—');
+  $('#s-fps').text((r.video_fps || 0).toFixed(1));
+
+  const rt = await api('/api/ugv/routine/status');
+  $('#s-routine').text(rt.running ? (rt.state || 'running') : 'idle').attr('class',
+    rt.running ? 'stat-val stat-warn' : 'stat-val');
+}
+
+/* ── ZeroTier ── */
+async function loadZT() {
+  const d = await api('/zt/status');
+  if (!d.ok) { $('#zt-node').text('Offline').attr('class','stat-val stat-err'); return; }
+  const i = d.info || {};
+  $('#zt-node').text(i.node_id || '—');
+  $('#zt-status-txt').text(i.status || '—').attr('class','stat-val stat-ok');
+  const nets = d.networks || [];
+  $('#zt-net-list').html(nets.length
+    ? nets.map(n => `<div class="zt-net"><span class="${n.status==='OK'?'zt-online':'zt-offline'}">${n.status}</span>
+        <span style="color:#ccc;flex:1">${n.id}</span><span style="color:#888">${n.name||''}</span></div>`).join('')
+    : '<span style="color:#555;font-size:11px">No networks joined</span>');
+}
+
+/* ── Users ── */
+async function loadUsers() {
+  const d = await api('/api/v2/admin/users');
+  if (!d.users) return;
+  $('#users-tbody').html(d.users.map(u => `
+    <tr>
+      <td>${u.username}</td>
+      <td><span class="role-badge role-${u.role}">${u.role}</span></td>
+      <td style="color:#666;font-size:11px">${(u.created_at||'').split('T')[0]}</td>
+      <td style="color:#666;font-size:11px">${(u.last_login||'—').split('T')[0]}</td>
+      <td>
+        ${u.username!=='admin'?`<button class="btn-sm btn-danger" onclick="deleteUser('${u.username}')">Delete</button>`:''}
+      </td>
+    </tr>`).join(''));
+}
+
+async function addUser() {
+  const username = $('#new-user').val().trim();
+  const password = $('#new-pass').val();
+  const role     = $('#new-role').val();
+  if (!username || !password) return;
+  const d = await api('/api/v2/admin/users', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({username, password, role})
+  });
+  if (d.ok) { $('#new-user').val(''); $('#new-pass').val(''); loadUsers(); }
+  else alert(d.error || 'Error');
+}
+
+async function deleteUser(username) {
+  if (!confirm(`Delete user "${username}"?`)) return;
+  const d = await api(`/api/v2/admin/users/${username}`, {method:'DELETE'});
+  if (d.ok) loadUsers(); else alert(d.error || 'Error');
+}
+
+/* ── Events ── */
+async function loadEvents() {
+  const d = await api('/api/ugv/cv/events?limit=40');
+  const evs = (d.events||[]).slice().reverse();
+  $('#event-list').html(evs.map(e => {
+    const t = (e.ts||'').split('T')[1]||'';
+    const det = e.details ? JSON.stringify(e.details).replace(/[{}"]/g,'') : '';
+    return `<li><span class="ev-t">${t}</span><span class="ev-ty">${e.type}</span><span class="ev-d">${det}</span></li>`;
+  }).join(''));
+}
+
+/* ── Settings ── */
+async function loadSettings() {
+  const d = await api('/api/v2/settings');
+  $('#settings-display').text(JSON.stringify(d, null, 2));
+  if (d.auth) $('#auth-enabled-cb').prop('checked', d.auth.enabled);
+}
+
+async function toggleAuth() {
+  const enabled = $('#auth-enabled-cb').is(':checked');
+  const d = await api('/api/v2/settings', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({'auth.enabled': enabled})
+  });
+  if (d.ok) { alert(`Auth ${enabled?'enabled':'disabled'} — restart may be needed`); loadSettings(); }
+  else alert(d.error || 'Error');
+}
+
+/* ── Who am I ── */
+async function loadMe() {
+  const d = await api('/auth/me');
+  if (d.authenticated) $('#admin-user-badge').text(`${d.username} (${d.role})`);
+}
+
+/* ── Init ── */
+$(function() {
+  loadMe();
+  loadStatus();
+  loadZT();
+  loadUsers();
+  loadEvents();
+  loadSettings();
+  setInterval(loadStatus, 8000);
+});
+</script>
+</body>
+</html>

@@ -8,10 +8,32 @@
     <script src="./socket.io.js"></script>
     <link rel="stylesheet" type="text/css" href="./style.css">
     <link rel="stylesheet" type="text/css" href="./ugv_hud.css">
+    <!-- V2: active theme (default dark, swapped by ugv_hud.js) -->
+    <link rel="stylesheet" type="text/css" href="./themes/dark.css" id="v2-theme-css">
     <style type="text/css">
     </style>
   </head>
 <body>
+    <!-- V2 top bar: theme switcher + user menu -->
+    <div id="v2-topbar">
+        <div id="v2-topbar-left">
+            <span id="v2-routine-badge" class="v2-badge v2-badge-idle">● IDLE</span>
+        </div>
+        <div id="v2-topbar-center">
+            <span id="v2-theme-label">🎨</span>
+            <div id="v2-theme-picker">
+                <button class="v2-theme-btn v2-theme-active" data-theme="dark"    onclick="v2SetTheme('dark')">DARK</button>
+                <button class="v2-theme-btn"                  data-theme="cyberpunk" onclick="v2SetTheme('cyberpunk')">CYBER</button>
+                <button class="v2-theme-btn"                  data-theme="military"  onclick="v2SetTheme('military')">MILITARY</button>
+                <button class="v2-theme-btn"                  data-theme="terminal"  onclick="v2SetTheme('terminal')">TERMINAL</button>
+            </div>
+        </div>
+        <div id="v2-topbar-right">
+            <span id="v2-user-info"></span>
+            <a id="v2-admin-link" href="/admin" style="display:none">ADMIN</a>
+            <a id="v2-logout-link" href="/auth/logout" style="display:none">LOGOUT</a>
+        </div>
+    </div>
     <main>
         <div class="box1">
             <section class="section_video box_outline">
