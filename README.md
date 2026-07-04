@@ -97,6 +97,22 @@ If the program fails to run and encounters errors related to v4l2.py during runt
 
 Now you can restart the main program app.py.
 
+## Base Info Feedback (JSON over UART)
+When enabled, the lower computer (ESP32, see [ugv_base_ros](https://github.com/waveshareteam/ugv_base_ros)) streams a `{"T":1001,...}` JSON message over UART with the following fields:
+
+    {"T":1001,"L":0,"R":0,"gx":0,"gy":0,"gz":0,"ax":0,"ay":0,"az":0,"mx":0,"my":0,"mz":0,"odl":0,"odr":0,"v":11.0}
+
+| Field | Meaning | Unit |
+|---|---|---|
+| `L` / `R` | Left / right wheel speed | meters per second (m/s) |
+| `odl` / `odr` | Left / right wheel odometer | ticks |
+| `v` | Battery voltage | volts (V) |
+| `ax`, `ay`, `az` | Accelerometer (ICM-20948) | raw DMP register counts, **not yet unit-converted** (not m/s²) |
+| `gx`, `gy`, `gz` | Gyroscope (ICM-20948) | raw DMP register counts, **not yet unit-converted** (not °/s) |
+| `mx`, `my`, `mz` | Magnetometer/compass (ICM-20948) | raw DMP register counts, **not yet unit-converted** (not µT) |
+
+The accelerometer/gyro/magnetometer values are passed straight from the ICM-20948's DMP output (`ugv_base_ros/ROS_Driver/ROS_Driver.ino`) without any scaling applied in firmware, so they should be treated as raw sensor readings rather than physical units until converted using the sensor's datasheet scale factors.
+
 # License
 ugv_rpi for the Raspberry Pi: an open source robotics platform for the Raspberry Pi.
 Copyright (C) 2024 [Waveshare](https://www.waveshare.com/)
