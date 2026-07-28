@@ -64,6 +64,7 @@ fetch(fetchConfig)
         config.min_rate = yamlObject.args_config.min_rate;
 
         config.module_type = yamlObject.base_config.module_type;
+        config.gripper_type = yamlObject.base_config.gripper_type;
 
         config.zoom = yamlObject.code.zoom;
 

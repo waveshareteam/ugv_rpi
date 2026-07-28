@@ -15,7 +15,7 @@ base_config:
   extra_sensor: false
   main_type: 2
   module_type: 1
-  gripper_type: 1
+  gripper_type: 0
   robot_name: UGV Rover
   sbc_version: 0.93
   use_lidar: false
