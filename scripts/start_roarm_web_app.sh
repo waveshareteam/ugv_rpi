@@ -1,5 +1,6 @@
 #!/bin/bash
-cd /home/ws/roarm_web_app || exit 1
+ROARM_DIR="${HOME}/roarm_web_app"
+cd "$ROARM_DIR" || exit 1
 
 export PATH=/usr/bin:/bin:/usr/local/bin:$PATH
 export NODE_ENV=production

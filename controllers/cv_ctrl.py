@@ -1236,21 +1236,29 @@ class OpencvFuncs():
             f['code']['led_aut']: 1,
             f['code']['led_ton']: 2,
             f['code']['head_ct']: 3,
-        } 
-        self.cv_light_mode = cv_light_mode_list[input_mode]     
-        if input_mode == 0:
-            self.base_ctrl.lights_ctrl(self.base_ctrl.base_light_status, 0)
+        }
+        try:
+            mode = cv_light_mode_list.get(int(input_mode))
+        except (TypeError, ValueError):
+            return
+        if mode is None:
+            return
+
+        if mode == 0:
             self.cv_light_mode = 0
-        elif input_mode == 2:
-            self.base_ctrl.lights_ctrl(self.base_ctrl.base_light_status, 255)
+            self.base_ctrl.lights_ctrl(self.base_ctrl.base_light_status, 0)
+        elif mode == 1:
+            self.cv_light_mode = 1
+        elif mode == 2:
             self.cv_light_mode = 2
-        elif input_mode == 3:
+            self.base_ctrl.lights_ctrl(self.base_ctrl.base_light_status, 255)
+        elif mode == 3:
             if self.cv_light_mode == 1:
                 return
-            elif self.base_ctrl.head_light_status == 0:
+            if self.base_ctrl.head_light_status == 0:
                 self.cv_light_mode = 2
                 self.base_ctrl.lights_ctrl(self.base_ctrl.base_light_status, 255)
-            elif self.base_ctrl.head_light_status != 0:
+            else:
                 self.cv_light_mode = 0
                 self.base_ctrl.lights_ctrl(self.base_ctrl.base_light_status, 0)
 

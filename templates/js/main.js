@@ -10,12 +10,9 @@ import {
     fetchPlayAudio,
     fetchStopAudio,
     fetchDeleteAudio,
-    fetchGetPhotoNames,
-    fetchDeletePhoto,
-    fetchGetVideoNames,
-    fetchDeleteVideo,
     fetchSendCommand,
 } from './api.js';
+import { updatePhotoNames, updateVideoList } from './gallery.js';
 import config from './config.js';
 let roarm_type =null;
 let gripper_type =null;
@@ -25,7 +22,15 @@ function onConfigLoaded() {
   if (config.robot_name) {
     document.title = config.robot_name + " WEB CTRL";
   }
-  if (config.module_type !== undefined) {
+  const busServoSetup = document.getElementById("bus_servo_setup");
+  if (busServoSetup) {
+    if (config.module_type === 2) {
+      busServoSetup.classList.remove("hidden");
+    } else {
+      busServoSetup.classList.add("hidden");
+    }
+  }
+  if (config.module_type !== undefined && view) {
     view.classList.remove("hidden");
     if (config.module_type===1){
         if (config.gripper_type===0){
@@ -38,9 +43,30 @@ function onConfigLoaded() {
     }else if (config.module_type===0 || config.module_type===2){
         view.classList.add("hidden");
     }
-    document.getElementById("roarmViewerFrame").src = `http://${window.location.hostname}:3000/play/${roarm_type}/`;
+    const roarmFrame = document.getElementById("roarmViewerFrame");
+    if (roarmFrame && roarm_type) {
+        roarmFrame.src = `http://${window.location.hostname}:3000/play/${roarm_type}/`;
+    }
   }
+  bindNoLongPressMenu();
   startRobotControl();
+  const armBtns = document.getElementById("armControlButtons");
+  if (armBtns) {
+    if (config.module_type === 1 || config.module_type === 3) {
+      armBtns.classList.remove("hidden");
+    } else {
+      armBtns.classList.add("hidden");
+    }
+  }
+  setLeftStickVisible(config.module_type === 1 || config.module_type === 3);
+}
+
+function setLeftStickVisible(visible) {
+    const leftBase = document.getElementById('ctrl_base_left');
+    const leftBox = leftBase && leftBase.closest('.ctrl_base_box');
+    if (leftBox) {
+        leftBox.classList.toggle('hidden', !visible);
+    }
 }
 
 fetch(fetchConfig)
@@ -121,6 +147,21 @@ fetch(fetchConfig)
 .catch(error => {
     console.error('Error fetching YAML file:', error);
 });
+
+function bindNoLongPressMenu() {
+    const preventMenu = (event) => {
+        event.preventDefault();
+    };
+    document.querySelectorAll('.ctrl_base_box, .ctl9, .tilt, .slider_track').forEach((el) => {
+        el.addEventListener('contextmenu', preventMenu);
+    });
+    document.querySelectorAll('.ctrl_base_box, .ctl9, .ctl9_base ul li').forEach((el) => {
+        el.addEventListener('touchstart', preventMenu, { passive: false });
+    });
+    document.querySelectorAll('.tilt').forEach((el) => {
+        el.addEventListener('touchmove', preventMenu, { passive: false });
+    });
+}
 
 function startRobotControl() {
 
@@ -332,7 +373,12 @@ function updateAudioFileList() {
                         btnDelete.className = 'delete-audio-btn'; 
                         btnDelete.title = 'delete audio file';
 
-                        btnDelete.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                        var delIcon = document.createElement('img');
+                        delIcon.src = './assets/img/white/delete.svg';
+                        delIcon.width = 16;
+                        delIcon.height = 16;
+                        delIcon.alt = 'delete';
+                        btnDelete.appendChild(delIcon);
 
                         btnDelete.addEventListener('click', function(e) {
                             e.stopPropagation();  
@@ -465,7 +511,9 @@ const observer = new IntersectionObserver((entries) => {
   });
 }, { threshold: 0.05 });
 
-observer.observe(wrapper);
+if (wrapper) {
+  observer.observe(wrapper);
+}
 
 const playPauseBtn = document.getElementById('playPause-btn');
 const playPauseIcon = document.getElementById('playPause-icon');
@@ -560,13 +608,40 @@ const loadAttributesFromQuery = () => {
   videoElement.controls = parseBoolString(params.get('controls'), false);
   videoElement.muted = parseBoolString(params.get('muted'), true);
   videoElement.autoplay = parseBoolString(params.get('autoplay'), true);
-  videoElement.playsInline = parseBoolString(params.get('playsinline'), false);
+  videoElement.playsInline = parseBoolString(params.get('playsinline'), true);
   defaultControls = videoElement.controls;
 };
 
 let stream_url = `http://${window.location.hostname}:8889/cam/`;
-window.addEventListener('load', () => {
+
+function tryPlayVideo() {
+  if (!videoElement || !videoElement.srcObject) {
+    return;
+  }
+  videoElement.muted = true;
+  videoElement.playsInline = true;
+  const playPromise = videoElement.play();
+  if (playPromise && typeof playPromise.catch === 'function') {
+    playPromise.catch(() => {
+      const resume = () => {
+        videoElement.play().catch(() => {});
+        document.removeEventListener('touchend', resume);
+        document.removeEventListener('click', resume);
+      };
+      document.addEventListener('touchend', resume, { once: true });
+      document.addEventListener('click', resume, { once: true });
+    });
+  }
+}
+
+function startWebrtc() {
+  if (!videoElement) {
+    return;
+  }
   loadAttributesFromQuery();
+  videoElement.playsInline = true;
+  videoElement.setAttribute('playsinline', '');
+  videoElement.setAttribute('webkit-playsinline', '');
   new MediaMTXWebRTCReader({
     url: new URL('whep', stream_url) + window.location.search,
     onError: (err) => {
@@ -575,110 +650,21 @@ window.addEventListener('load', () => {
     onTrack: (evt) => {
       setMessage('');
       videoElement.srcObject = evt.streams[0];
+      tryPlayVideo();
     },
   });
-});
-
-//update photos list
-function generatePhotoLink(imgname) {
-    var strippedname = imgname.replace("photo_", "").replace(".jpg", "");
-    var photoLink = '<li><a target="_blank" href="/media/pictures/' + imgname + '" ><img class="photo_img" data-filename="' +imgname + '" src="/media/pictures/' + imgname + '" /></a>';
-    photoLink += '<p>' + strippedname + '</p>';
-    photoLink += '<div class="delete_btn"><button class="normal_btn delete_btn_size normal_btn_del btn_ico"></button></div></li>';
-    return photoLink;
 }
 
-function updatePhotoNames() {
-    $.get(fetchGetPhotoNames, function (data) {
-        var photoLinks = '';
-        if (window.location.pathname === '/') {
-            for (var i = 0; i < Math.min(6, data.length); i++) {
-                var name = data[i];
-                photoLinks += generatePhotoLink(name);
-            }
-            $('#photo-list').html(photoLinks);
-        } else {
-            for (var i = 0; i < data.length; i++) {
-                var name = data[i];
-                photoLinks += generatePhotoLink(name);
-            }
-            $('#photo-list').html(photoLinks);
-        }
-        $("#number-photos").text(data.length);
-        //delete photo
-        $("#photo-list li button").on("click", function () {
-            var filename = $(this).closest("li").find("img.photo_img").data('filename');
-            $.post(fetchDeletePhoto, { filename: filename }, function (response) {
-                if (response.success) {
-                    updatePhotoNames();
-                } else {
-                    alert("Failed to delete the file.");
-                }
-            });
-        });
-    });
+if (document.readyState === 'complete') {
+  startWebrtc();
+} else {
+  window.addEventListener('load', startWebrtc);
 }
-
-updatePhotoNames();
 
 function captureAndUpdate() {
     cmdSend(config.pic_cap, 0);
     setTimeout(updatePhotoNames, 100);
 }
-
-//show videos tips
-function showVideosTips() {
-    var videostipsbox = $("#video-del-tips");
-    videostipsbox.css("opacity", "1");
-    videostipsbox.css("transform", `translate(-50%, -100%)`);
-    setTimeout(function () {
-        videostipsbox.removeAttr("style");
-    }, 2000);
-}
-
-// update videos list
-function generateVideoLink(vname) {
-    var strippedname = vname.replace("video_", "").replace(".mp4", "");
-    var videoList = '<li><a target="_blank" data-filename="' + vname + '" href="/media/videos/' + vname + '">';
-    videoList += '<p>' + strippedname + '</p>';
-    videoList += '<div><div class="delete_btn_size normal_btn_play btn_ico"></div></div></a>';
-    videoList += '<div class="delete_btn"><div class="delete_btn_size normal_btn_del btn_ico"></div></div></li>';
-    return videoList;
-}
-
-function updateVideoList() {
-    $.get(fetchGetVideoNames, function (data) {
-        var videosLists = '';
-        if (window.location.pathname === '/') {
-            for (var i = 0; i < Math.min(6, data.length); i++) {
-                var name = data[i];
-                videosLists += generateVideoLink(name);
-            }
-            $('#video-list').html(videosLists);
-        } else {
-            for (var i = 0; i < data.length; i++) {
-                var name = data[i];
-                videosLists += generateVideoLink(name);
-            }
-            $('#video-list').html(videosLists);
-        }
-        $("#number-videos").text(data.length);
-        //delete videos
-        $("#video-list li div.normal_btn_del").on("click", function () {
-            var filename = $(this).closest("li").find("a").data('filename');
-            $.post(fetchDeleteVideo, { filename: filename }, function (response) {
-                if (response.success) {
-                    updateVideoList();
-                    showVideosTips();
-                } else {
-                    alert("Failed to delete the video.");
-                }
-            });
-        });
-    });
-}
-
-updateVideoList();
 
 //video pixel
 var listItems = $("#video_pixel_btn_list").children("li");
@@ -1109,16 +1095,25 @@ function toggleArmMode() {
     }
     if (config.module_type === 1 || config.module_type === 3) {
         armButtons.classList.remove("hidden");
+        setLeftStickVisible(true);
     } else {
         armButtons.classList.add("hidden");
+        setLeftStickVisible(false);
     }
+    const sliderWrap = document.querySelector('.slider_wrap');
     if (slider && sliderText) {
         if(config.module_type === 2){
             sliderText.textContent  = "Y:";
             slider.min = -0.7854;
+            slider.max = 1.5708;
+            sliderWrap?.classList.remove("hidden");
             rightJoystick = createJoystick('joystick_right', 'x', 'y', 'ahead_on');
+            syncCustomSlider();
         }else if(config.module_type === 1 || config.module_type === 3 ){
             sliderText.textContent  = "G:";
+            slider.min = 0;
+            slider.max = 1.5708;
+            sliderWrap?.classList.remove("hidden");
             if (armMode === 'joint') {
                 armMode = 'pose';
                 leftJoystick = createJoystick('joystick_left', 'x', 'y', 'z');
@@ -1127,9 +1122,10 @@ function toggleArmMode() {
                 armMode = 'joint';
                 leftJoystick = createJoystick('joystick_left', 'base', 'shoulder', 'elbow');
                 rightJoystick = createJoystick('joystick_right', 'roll', 'wrist', 'ahead_on');
-            }        
+            }
+            syncCustomSlider();
         }else if(config.module_type === 0 ){
-            slider.classList.add("hidden");
+            sliderWrap?.classList.add("hidden");
         }
     }    
 
@@ -1239,8 +1235,66 @@ document.querySelectorAll('input[type=range].custom-slider').forEach(slider => {
   slider.addEventListener('input', () => updateSliderBackground(slider));
 });
 
+(function ensureCustomSliderDom() {
+    const el = document.getElementById('slider');
+    if (!el) {
+        return;
+    }
+    const wrap = el.parentElement;
+    if (wrap) {
+        wrap.classList.add('slider_wrap');
+    }
+    if (!document.getElementById('slider_track')) {
+        const track = document.createElement('span');
+        track.id = 'slider_track';
+        track.className = 'slider_track';
+        const fill = document.createElement('span');
+        fill.id = 'slider_fill';
+        fill.className = 'slider_fill';
+        const thumb = document.createElement('span');
+        thumb.id = 'slider_thumb';
+        thumb.className = 'slider_thumb';
+        track.append(fill, thumb);
+        el.insertAdjacentElement('afterend', track);
+    }
+    const scale = document.getElementById('tilt_scale');
+    const scaleDiv = document.getElementById('tilt_scalediv');
+    if (wrap && scale && scaleDiv && wrap !== scaleDiv.previousElementSibling) {
+        scale.insertBefore(wrap, scaleDiv);
+    }
+})();
+
 const slider = document.getElementById('slider');
 const sliderText = document.getElementById('slider_text');
+const sliderTrack = document.getElementById('slider_track');
+const sliderFill = document.getElementById('slider_fill');
+const sliderThumb = document.getElementById('slider_thumb');
+
+function syncCustomSlider() {
+    if (!slider || !sliderFill || !sliderThumb) {
+        return;
+    }
+    const min = parseFloat(slider.min);
+    const max = parseFloat(slider.max);
+    const val = parseFloat(slider.value);
+    const ratio = max === min ? 0 : (val - min) / (max - min);
+    const pct = Math.max(0, Math.min(1, ratio)) * 100;
+    sliderFill.style.height = pct + '%';
+    sliderThumb.style.top = (100 - pct) + '%';
+}
+
+function applySliderFromClientY(clientY) {
+    if (!slider || !sliderTrack) {
+        return;
+    }
+    const rect = sliderTrack.getBoundingClientRect();
+    const ratio = 1 - ((clientY - rect.top) / Math.max(rect.height, 1));
+    const min = parseFloat(slider.min);
+    const max = parseFloat(slider.max);
+    slider.value = min + Math.max(0, Math.min(1, ratio)) * (max - min);
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    syncCustomSlider();
+}
 
 if (slider && sliderText) {
   slider.addEventListener('input', (e) => {
@@ -1249,7 +1303,43 @@ if (slider && sliderText) {
     }else if(config.module_type === 2){
         ptPoseState.y = radToDeg(e.target.value);
     }
+    syncCustomSlider();
   });
+}
+
+if (sliderTrack) {
+    let sliderDragging = false;
+    const pointerY = (event) => (event.touches && event.touches[0] ? event.touches[0].clientY : event.clientY);
+
+    const onSliderStart = (event) => {
+        sliderDragging = true;
+        document.body.style.overflow = 'hidden';
+        event.preventDefault();
+        applySliderFromClientY(pointerY(event));
+    };
+    const onSliderMove = (event) => {
+        if (!sliderDragging) {
+            return;
+        }
+        event.preventDefault();
+        applySliderFromClientY(pointerY(event));
+    };
+    const onSliderEnd = () => {
+        if (!sliderDragging) {
+            return;
+        }
+        sliderDragging = false;
+        document.body.style.overflow = '';
+    };
+
+    sliderTrack.addEventListener('touchstart', onSliderStart, { passive: false, capture: true });
+    sliderTrack.addEventListener('mousedown', onSliderStart);
+    document.addEventListener('touchmove', onSliderMove, { passive: false, capture: true });
+    document.addEventListener('mousemove', onSliderMove);
+    document.addEventListener('touchend', onSliderEnd);
+    document.addEventListener('touchcancel', onSliderEnd);
+    document.addEventListener('mouseup', onSliderEnd);
+    syncCustomSlider();
 }
 
 function updatePanTiltUI(panRad, tiltRad) {
@@ -1264,186 +1354,235 @@ function updatePanTiltUI(panRad, tiltRad) {
     const pointer = document.getElementById('tilt_scale_pointer');
     const tiltScaleOut = document.getElementById('tilt_scale');
     const tiltScalediv = document.getElementById('tilt_scalediv');
+    if (!pointer || !tiltScaleOut || !tiltScalediv || !tiltNum) {
+        return;
+    }
 
+    const tiltRoot = pointer.parentElement;
     const tiltScaleHeight = tiltScaleOut.getBoundingClientRect().height;
     const tiltNumHeight = tiltNum.getBoundingClientRect().height;
-    const tiltDivWidth = tiltScalediv.getBoundingClientRect().width;
-
+    const tiltBox = tiltRoot.getBoundingClientRect();
+    const scaleBox = tiltScalediv.getBoundingClientRect();
+    const translateX = scaleBox.right - tiltBox.left;
     const pointerMoveY = tiltScaleHeight / 135;
     const translateY = pointerMoveY * (90 - tiltDeg) - tiltNumHeight / 2;
 
-    pointer.style.transform = `translate(${tiltDivWidth}px, ${translateY}px)`;
+    pointer.style.transform = `translate(${translateX}px, ${translateY}px)`;
 }
 
+requestAnimationFrame(() => {
+    const panEl = document.getElementById("Pan");
+    const tiltEl = document.getElementById("Tilt");
+    const pan = parseFloat(panEl && panEl.textContent) || 0;
+    const tilt = parseFloat(tiltEl && tiltEl.textContent) || 0;
+    updatePanTiltUI(pan, tilt);
+});
+
+const STICK_DEADZONE_PX = 10;
+const STICK_CENTER_HOLD_MS = 100;
+const STICK_DT_MAX_S = 0.05;
+const STICK_PT_DEG_PER_S = 50;
+const STICK_JOINT_RAD_PER_S = 0.3;
+const STICK_POSE_POS_PER_S = 50;
+const STICK_POSE_RP_RAD_PER_S = 0.2;
+
 function createJoystick(containerId, axisX, axisY, clickCenter = null) {
-    let lastVectorX = 0;
-    let lastVectorY = 0;
+    let stickVector = { x: 0, y: 0 };
+    let stickDistance = 0;
     let isPressed = false;
     let pressStartTime = 0;
     let clickCenterAccumulatorTimer = null;
+    let holdRafId = null;
+    let lastHoldTime = 0;
+    let holding = false;
 
-    const ctrlBaseLeft = document.getElementById('ctrl_base_left');
-    const ctrlBaseRight = document.getElementById('ctrl_base_right');
-
-    if(ctrlBaseLeft && containerId == 'joystick_left'){
-        ctrlBaseLeft.style.border = '2px solid rgba(79, 245, 192, 1)';    
-    }else if(ctrlBaseRight && containerId == 'joystick_right'){
-        ctrlBaseRight.style.border = '2px solid rgba(79, 245, 192, 1)';
-    }
-
-    const container = document.getElementById(containerId);
+    const zoneIds = {
+        joystick_left: 'ctrl_base_left',
+        joystick_right: 'ctrl_base_right',
+    };
+    const container = document.getElementById(zoneIds[containerId] || containerId);
     if (!container) {
         console.warn(`Joystick container not found: ${containerId}`);
         return null;
     }
 
+    const size = Math.round(container.getBoundingClientRect().width) || 80;
     const joystick = nipplejs.create({
         zone: container,
         mode: 'static',
         position: { left: '50%', top: '50%' },
         color: 'rgba(79, 245, 192, 1)',
-        size: 100,  
-        restOpacity: 0.5  
+        size: size,
+        restOpacity: 0.5
     });
 
-    joystick.on('start', () => {
-        lastVectorX = 0;
-        lastVectorY = 0;
-        isPressed = false;
-        pressStartTime = 0;
-    });
-
-    joystick.on('move', (evt, data) => {
-        if (!data || !data.vector) return;
-
+    function stickModeConfig() {
         if (config.module_type === 2) {
-            handleVectorUpdate({
-                data,
-                axisX,
-                axisY,
+            return {
                 stateObject: ptPoseState,
-                scale: 10,
                 transformVector: (v) => [v.x, v.y],
-                clickCenterOptions: clickCenter ? {
-                    callback: lookAhead,
-                } : null
-            });
-        } else if (config.module_type === 1 || config.module_type === 3) {
+                rate: STICK_PT_DEG_PER_S,
+                clickCenterOptions: clickCenter ? { callback: lookAhead } : null,
+            };
+        }
+        if (config.module_type === 1 || config.module_type === 3) {
             if (armMode === 'joint') {
-                handleVectorUpdate({
-                    data,
-                    axisX,
-                    axisY,
+                return {
                     stateObject: armJointState,
-                    scale: 0.1,
                     transformVector: (v) => [-v.x, v.y],
+                    rate: STICK_JOINT_RAD_PER_S,
                     clickCenterOptions: clickCenter ? {
                         factorPerSecond: 0.1,
                         stateObject: armJointState,
                         callback: lookAhead,
-                    } : null
-                });
-            } else if (armMode === 'pose') {
-                handleVectorUpdate({
-                    data,
-                    axisX,
-                    axisY,
+                    } : null,
+                };
+            }
+            if (armMode === 'pose') {
+                return {
                     stateObject: armPoseState,
-                    scale: 20,
                     transformVector: (v) => [v.y, -v.x],
+                    rate: STICK_POSE_POS_PER_S,
                     clickCenterOptions: clickCenter ? {
                         factorPerSecond: 50,
                         stateObject: armPoseState,
                         callback: lookAhead,
-                    } : null
-                });
+                    } : null,
+                };
             }
         }
-    });
+        return null;
+    }
 
-    joystick.on('end', () => {
-        lastVectorX = 0;
-        lastVectorY = 0;
-        stopPressing();
-    });
-
-    function handleVectorUpdate({
-        data,
-        axisX,
-        axisY,
-        stateObject,
-        scale,
-        transformVector,
-        clickCenterOptions
-    }) {
-        const [currX, currY] = transformVector(data.vector);
-        const deltaX = currX - lastVectorX;
-        const deltaY = currY - lastVectorY;
-        if (data.distance > 10) {
-            if(axisX=='p' || axisY=='r'){
-                stateObject[axisX] += deltaX * 0.1;
-                stateObject[axisY] += -deltaY * 0.1;
-            } else if(axisX=='roll'){
-                stateObject[axisX] += -deltaX * 0.1;
-                stateObject[axisY] += deltaY * 0.1;
-            } else {
-                stateObject[axisX] += deltaX * scale;
-                stateObject[axisY] += deltaY * scale;
-            }
-        }
-
-        lastVectorX = currX;
-        lastVectorY = currY;
-        if (clickCenterOptions && data.distance < 10) {
-            if (!isPressed) {
-                if (pressStartTime === 0) {
-                    pressStartTime = Date.now(); 
-                    console.log(`[${containerId}] pressStartTime set:`, pressStartTime);
-                } else {
-                    const heldTime = Date.now() - pressStartTime;
-                    console.log(`[${containerId}] heldTime:`, heldTime);
-
-                    const threshold = 100;  
-                    if (heldTime >= threshold) {
-                        isPressed = true;
-                        console.log(`[${containerId}] long-pressed`);
-
-                        if (!clickCenterAccumulatorTimer) {
-                            clickCenterAccumulatorTimer = setInterval(() => {
-                                const now = Date.now();
-                                const dt = (now - pressStartTime) / 1000;
-                                pressStartTime = now;
-
-                                const direction = (pressMode === 'increase') ? 1 : -1;
-                                if (clickCenter === "ahead_on") {
-                                    clickCenterOptions.callback();
-                                } else {
-                                    const increment = direction * clickCenterOptions.factorPerSecond * dt;
-                                    clickCenterOptions.stateObject[clickCenter] += increment;
-                                }
-                            }, 30);
-                        }
-                    }
-                }
-            }
+    function applyOuterRate(dt, mode) {
+        const [vx, vy] = mode.transformVector(stickVector);
+        if (axisX === 'p' || axisY === 'r') {
+            mode.stateObject[axisX] += vx * STICK_POSE_RP_RAD_PER_S * dt;
+            mode.stateObject[axisY] += -vy * STICK_POSE_RP_RAD_PER_S * dt;
+        } else if (axisX === 'roll') {
+            mode.stateObject[axisX] += -vx * STICK_JOINT_RAD_PER_S * dt;
+            mode.stateObject[axisY] += vy * STICK_JOINT_RAD_PER_S * dt;
         } else {
-            if (isPressed || pressStartTime !== 0) {
-                stopPressing();
-            }
+            mode.stateObject[axisX] += vx * mode.rate * dt;
+            mode.stateObject[axisY] += vy * mode.rate * dt;
         }
     }
 
-    function stopPressing() {
-        if (isPressed) {
-            isPressed = false;
-            console.log(`[${containerId}] released`);
+    function applyCenterHold(mode) {
+        const clickCenterOptions = mode.clickCenterOptions;
+        if (!clickCenterOptions) {
+            return;
         }
+        if (isPressed) {
+            return;
+        }
+        if (pressStartTime === 0) {
+            pressStartTime = Date.now();
+            return;
+        }
+        if (Date.now() - pressStartTime < STICK_CENTER_HOLD_MS) {
+            return;
+        }
+        isPressed = true;
+        if (clickCenterAccumulatorTimer) {
+            return;
+        }
+        clickCenterAccumulatorTimer = setInterval(() => {
+            const now = Date.now();
+            const dt = Math.min((now - pressStartTime) / 1000, STICK_DT_MAX_S);
+            pressStartTime = now;
+            const direction = (pressMode === 'increase') ? 1 : -1;
+            if (clickCenter === 'ahead_on') {
+                clickCenterOptions.callback();
+            } else {
+                clickCenterOptions.stateObject[clickCenter] += direction * clickCenterOptions.factorPerSecond * dt;
+            }
+        }, 30);
+    }
+
+    function applyStick(dt) {
+        const mode = stickModeConfig();
+        if (!mode) {
+            return;
+        }
+        if (stickDistance < STICK_DEADZONE_PX) {
+            applyCenterHold(mode);
+            return;
+        }
+        stopPressing();
+        applyOuterRate(dt, mode);
+    }
+
+    function holdLoop(nowMs) {
+        if (!holding) {
+            return;
+        }
+        const now = nowMs / 1000;
+        let dt = lastHoldTime ? (now - lastHoldTime) : 0;
+        lastHoldTime = now;
+        if (dt > STICK_DT_MAX_S) {
+            dt = STICK_DT_MAX_S;
+        }
+        if (dt > 0) {
+            applyStick(dt);
+        }
+        holdRafId = requestAnimationFrame(holdLoop);
+    }
+
+    function startHoldLoop() {
+        if (holding) {
+            return;
+        }
+        holding = true;
+        lastHoldTime = 0;
+        holdRafId = requestAnimationFrame(holdLoop);
+    }
+
+    function stopHoldLoop() {
+        holding = false;
+        if (holdRafId) {
+            cancelAnimationFrame(holdRafId);
+            holdRafId = null;
+        }
+        lastHoldTime = 0;
+        stickVector = { x: 0, y: 0 };
+        stickDistance = 0;
+        stopPressing();
+    }
+
+    function stopPressing() {
+        isPressed = false;
         pressStartTime = 0;
         if (clickCenterAccumulatorTimer) {
             clearInterval(clickCenterAccumulatorTimer);
             clickCenterAccumulatorTimer = null;
         }
     }
+
+    joystick.on('start', () => {
+        stickVector = { x: 0, y: 0 };
+        stickDistance = 0;
+        stopPressing();
+        startHoldLoop();
+    });
+
+    joystick.on('move', (evt, data) => {
+        if (!data || !data.vector) {
+            return;
+        }
+        stickVector = { x: data.vector.x, y: data.vector.y };
+        stickDistance = data.distance;
+    });
+
+    joystick.on('end', () => {
+        stopHoldLoop();
+    });
+
+    const origDestroy = joystick.destroy.bind(joystick);
+    joystick.destroy = function () {
+        stopHoldLoop();
+        origDestroy();
+    };
 
     return joystick;
 }
@@ -1456,11 +1595,17 @@ function lookAhead() {
         armJointState.wrist = 0;
         armJointState.roll = 0;
         armJointState.hand = 3.1416;
-        if (slider) { slider.value = 3.1416 - armJointState.hand;}
+        if (slider) {
+            slider.value = 3.1416 - armJointState.hand;
+            syncCustomSlider();
+        }
     }else if (config.module_type === 2 ) {
         ptPoseState.x = 0;
         ptPoseState.y = 0;
-        if (slider) { slider.value = 0;}
+        if (slider) {
+            slider.value = 0;
+            syncCustomSlider();
+        }
     }
 }
 
@@ -1792,7 +1937,7 @@ var heartbeat_send_flag = true;
 
 function heartbeat_send() {
     if (socketJson.connected && heartbeat_send_flag && !cv_heartbeat_stop_flag) {
-        cmdJsonCmd({ 'T': config.cmd_ros_movition_ctrl, 'x': 0, 'z': 0 });
+        cmdJsonCmd({ 'T': config.cmd_ros_movition_ctrl, 'X': 0, 'Z': 0 });
     }
 }
 
@@ -1933,6 +2078,7 @@ function keyboardCtrl() {
     if (keyState.g) {
         armJointState.hand -= 0.01 * direction;
         document.getElementById('slider').value = 3.1416 - armJointState.hand;
+        syncCustomSlider();
     }
 
     if (keyState.ahead_on) lookAhead();
@@ -2129,10 +2275,11 @@ function gamepadCtrl() {
             ledPwmState.io4 += deltaLed;
 
             if (config.module_type === 2) {
-                if (last_gp_rt2 != gp.buttons[mapping["R2"]].pressed) {
-                    last_gp_rt2 = gp.buttons[mapping["R2"]].pressed;
-                    cmdSend(config.head_ct, 0);
+                const r2Pressed = gp.buttons[mapping["R2"]].pressed;
+                if (r2Pressed && !last_gp_rt2) {
+                    cmdSend(config.led_mode, config.head_ct);
                 }
+                last_gp_rt2 = r2Pressed;
                 const gp_pt_speed = 1;
 
                 var change_x = gp.axes[mapping["RIGHT_STICK_X"]];
@@ -2159,11 +2306,7 @@ function gamepadCtrl() {
                 const r1Pressed = gp.buttons[mapping["R1"]].pressed;
                 const now_r1 = Date.now();
                 if (r1Pressed && !last_btn_r1 && (now_r1 - lastSwitchTime_r1 > switchCooldown)) {
-                    armMode = (armMode === 'pose') ? 'joint' : 'pose';
-                    if (armModeToggleEl) {
-                        armModeToggleEl.textContent = capitalize(armMode);
-                    }
-
+                    toggleArmMode();
                     lastSwitchTime_r1 = now_r1;
                 }
 

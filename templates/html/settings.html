@@ -3,8 +3,6 @@
     <title>Bus Servos Initialization Setup</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <!-- <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script> -->
-    <script src="../libs/jquery-3.7.1.min.js"></script>
     <script src="../libs/js-yaml.min.js"></script>
     <script src="../libs/socket.io.js"></script>
     <link href="../css/style.css" rel="stylesheet" type="text/css">
@@ -13,7 +11,12 @@
   </head>
 <body>
     <main>
-        <div class="setting box_outline">
+        <div id="pt_only_notice" class="setting box_outline hidden">
+            <section class="setting_sc">
+              <p>This page is for Camera PT bus-servo setup (module type 2). The current robot module is not pan-tilt.</p>
+            </section>
+        </div>
+        <div id="pt_setup" class="setting box_outline">
             <section class="setting_sc">
               <p>For the first time use of this Pan-Tilt, you will need to follow these steps to config the servos' ID and middle position:</p>
               <p class="t_special"><span class="t_light t_bg_black">Tilt Servo ID: 1</span><span class="t_light t_bg_black">Pan Servo ID: 2</span></p>
@@ -82,10 +85,9 @@
             </section>
         </div>
         <div class="long_btn">
-          <a href="../"><span>&lt;&nbsp;</span>Index Page</span></a>
+          <a href="../"><span>&lt;&nbsp;</span>Index Page</a>
       </div>
     </main>
 </body>
-<!-- <script src="./control.js"></script> -->
-<script type="module" src="../js/main.js"></script>
+<script src="../js/settings.js"></script>
 </html>

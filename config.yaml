@@ -13,9 +13,9 @@ audio_config:
 base_config:
   add_osd: false
   extra_sensor: false
+  gripper_type: 0
   main_type: 2
   module_type: 1
-  gripper_type: 0
   robot_name: UGV Rover
   sbc_version: 0.93
   use_lidar: false

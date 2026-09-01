@@ -6,9 +6,8 @@
     <script src="./libs/jquery-3.7.1.min.js"></script>
     <script src="./libs/js-yaml.min.js"></script>
     <script src="./libs/socket.io.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.9.0/dist/nipplejs.min.js"></script>
+    <script src="./libs/nipplejs.min.js"></script>
     <link rel="stylesheet" type="text/css" href="./css/style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <style type="text/css">
     </style>
   </head>
@@ -55,10 +54,15 @@
                                                 <p id="Tilt">0</p>
                                             </div>
                                             <div id="tilt_scale" class="tilt_scale">
-                                                <div id="tilt_scalediv"></div>
-                                                <p><span id="slider_text"></span>
+                                                <p class="slider_wrap">
+                                                <span id="slider_text"></span>
                                                 <input id="slider" class="vertical-slider" type="range" min="0" max="1.5708" step="0.01" value="0">
+                                                <span id="slider_track" class="slider_track">
+                                                    <span id="slider_fill" class="slider_fill"></span>
+                                                    <span id="slider_thumb" class="slider_thumb"></span>
+                                                </span>
                                                 </p>
+                                                <div id="tilt_scalediv"></div>
                                             </div>
                                         </div>
                                     </div>
@@ -142,10 +146,7 @@
                             <div class="ctl9_middle_pos">
                                 <div class="ctl9_middle_pos ctl9_middle_light">
                                     <div class="ctl9_middle_pos">
-                                        <div 
-                                            onmousedown="cmdSend(led_mode,head_ct);" 
-                                            ontouchstart="cmdSend(led_mode,head_ct);" 
-                                            onmouseup="cmdSend(led_mode,head_ct);" ontouchend="cmdSend(led_mode,head_ct);">
+                                        <div onclick="cmdSend(led_mode,head_ct);">
                                         FUNC</div>
                                     </div>
                                 </div>
@@ -302,7 +303,7 @@
                     </div>
                 </div>
             </section>
-            <section>
+            <section id="bus_servo_setup" class="hidden">
                 <div>
                     <h2 id="test" class="sc_title normal_sc_title">Bus Servos Initialization Setup</h2>
                     <div class="long_btn new_page ">

@@ -1,0 +1,16 @@
+2026/09/01 18:38:21 INF MediaMTX v1.13.1
+2026/09/01 18:38:21 INF configuration loaded from /home/ws/ugv_rpi/controllers/Mediamtx/mediamtx.yml
+2026/09/01 18:38:21 INF [RTSP] listener opened on :8554 (TCP), :8000 (UDP/RTP), :8001 (UDP/RTCP)
+2026/09/01 18:38:21 INF [WebRTC] listener opened on :8889 (HTTP), :8189 (ICE/UDP)
+2026/09/01 18:38:21 INF [WebRTC] [session 6e616d96] created by 192.168.9.50:55561
+2026/09/01 18:38:21 INF [WebRTC] [session 6e616d96] closed: no stream is available on path 'cam'
+2026/09/01 18:38:22 INF [RTSP] [conn [::1]:37100] opened
+2026/09/01 18:38:22 INF [RTSP] [session e6d9c9e4] created by [::1]:37100
+2026/09/01 18:38:22 INF [RTSP] [session e6d9c9e4] is publishing to path 'cam', 1 track (H264)
+2026/09/01 18:38:23 INF [WebRTC] [session 5e0a4b3a] created by 192.168.9.50:55561
+2026/09/01 18:38:24 INF [WebRTC] [session 5e0a4b3a] peer connection established, local candidate: host/udp/172.17.0.1/8189, remote candidate: prflx/udp/192.168.9.50/54140
+2026/09/01 18:38:24 INF [WebRTC] [session 5e0a4b3a] is reading from path 'cam', 1 track (H264)
+2026/09/01 18:38:34 INF [WebRTC] [session 5e0a4b3a] closed: peer connection closed
+2026/09/01 18:38:35 INF [WebRTC] [session 8e890eac] created by 192.168.9.50:55561
+2026/09/01 18:38:35 INF [WebRTC] [session 8e890eac] peer connection established, local candidate: host/udp/127.0.0.1/8189, remote candidate: prflx/udp/192.168.9.50/60091
+2026/09/01 18:38:35 INF [WebRTC] [session 8e890eac] is reading from path 'cam', 1 track (H264)

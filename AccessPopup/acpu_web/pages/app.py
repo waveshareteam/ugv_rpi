@@ -38,7 +38,7 @@ def render(request: Request, template: str, context: dict | None = None):
 @app.get("/set_lang/{lang}")
 async def set_lang(lang: str, request: Request):
     if lang not in ("en", "zh"):
-        lang = "zh"
+        lang = "en"
     referer = request.headers.get("referer", "/")
     response = RedirectResponse(url=referer, status_code=303)
     response.set_cookie("lang", lang, max_age=60 * 60 * 24 * 365)

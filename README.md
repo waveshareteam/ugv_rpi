@@ -38,13 +38,11 @@ The upper computer communicates with the lower computer (the robot's driver base
 - Video Recording
 
 ## Quick Install
-You need to install Raspberry Pi on your robot if you are using **WAVE ROVER**, **UGV01** or **UGV02**.  
+You need to install a Raspberry Pi on your robot if you are using **WAVE ROVER**, **UGV01** or **UGV02**.  
 
-This app is already installed in the SD card of **UGV Rover**, **UGV Beast** and **RaspRover**.  
+This app is already installed on the SD card of **UGV Rover**, **UGV Beast** and **RaspRover**.  
 
-You can use this tutorial to upgrade your robot's upper computer program.  
-
-You can use this tutorial to install this program on a pure Raspberry Pi OS.  
+To **upgrade** an existing upper-computer install, or to **install** this program on a fresh Raspberry Pi OS, follow **Quick Install** below. Product wiki (host-computer notes): [UGV Rover](https://www.waveshare.com/wiki/UGV-Rover), [UGV01](https://www.waveshare.com/wiki/UGV01), [UGV02](https://www.waveshare.com/wiki/UGV02).
 
 
 ### Download the repo from github
@@ -53,9 +51,6 @@ You can clone this repository from Waveshare's GitHub to your local machine.
 
     git clone -b refactor/debian12-2025.10.01-py3.11 https://github.com/waveshareteam/ugv_rpi.git
 
-### Download speech synthesis model file
-    cd ugv_rpi/
-    git lfs pull
 ### Grant execution permission to the mediamtx 
     cd ugv_rpi/
     sudo chmod +x controllers/Mediamtx/mediamtx
@@ -67,6 +62,11 @@ You can clone this repository from Waveshare's GitHub to your local machine.
 ### Install app (it'll take a while before finish)
     cd ugv_rpi/scripts/
     sudo ./setup.sh
+### Download speech synthesis model file
+`setup.sh` installs `git-lfs`. Pull the TTS model after that:
+
+    cd ugv_rpi/
+    git lfs pull
 ### Autorun setup
     cd ugv_rpi/scripts/
     ./autorun.sh
@@ -93,17 +93,19 @@ After powering on the robot, the Raspberry Pi will automatically establish a hot
 
 You can access the robot web app using a mobile phone or PC. Simply open your browser and enter `[IP]:5000` (for example, `192.168.10.50:5000`) in the URL bar to control the robot.  
 
+For how to use the control page (drive, camera, CV, keyboard, and gamepad), see [Web UI](docs/web_ui.md). A USB gamepad can be plugged into the **PC** (browser) or into the **Raspberry Pi** (onboard `joy_ctrl`); do not use both at once. The optional arm 3D preview (**RoArm View**) uses port **3000** if you installed `roarm_web_app` during `autorun.sh`.  
+
 To access JupyterLab, use `[IP]:8888` (for example, `192.168.10.50:8888`).  
 
 If the robot is not connected to a known WiFi network, it will automatically set up a hotspot named "`AccessPopup`" with the password `1234567890`. You can then use a mobile phone or PC to connect to this hotspot. Once connected, open your browser and enter `192.168.50.5:5000` in the URL bar to control the robot.  
 
-To ensure compatibility with various types of robots running on Raspberry Pi, we utilize a config.yaml file to specify the particular robot being used. You can configure the robot by entering the following command:
+To ensure compatibility with various types of robots running on Raspberry Pi, we utilize a config.yaml file to specify the particular robot being used. After the Web UI is open (`http://<robot-ip>:5000`), type this in **Enter Command** and click **Send**, then reload the page:
 
     s 22
 
-In this command, the s directive denotes a robot-type setting. The first digit, `2`, signifies that the robot is a `UGV Rover`, with `1` representing `RaspRover` and `3` indicating `UGV Beast`. The second digit, also `2`, specifies the module as `Camera PT`, where `0` denotes `Nothing` , `1` signifies `RoArm-M2`，`3` signifies `RoArm-M3`.  
+In this command, the `s` directive denotes a robot-type setting. The first digit, `2`, signifies that the robot is a `UGV Rover` (also **WAVE ROVER** and **UGV02**), with `1` representing `RaspRover` and `3` indicating `UGV Beast` (also **UGV01**). The second digit, also `2`, specifies the module as `Camera PT`, where `0` denotes `Nothing` , `1` signifies `RoArm-M2`，`3` signifies `RoArm-M3`. `s XY` does not set the gripper; `gripper_type` in `config.yaml` only switches the RoArm 3D preview (`0` = `roarm_m2`, otherwise `roarm_m2_ga`). See [Web UI](docs/web_ui.md).  
 
-### Reboot Device
+### v4l2.py error
 If the program fails to run and encounters errors related to v4l2.py during runtime, you need to delete v4l2.py from both the Python virtual environment and the user environment. This will allow the program to automatically use the system-wide v4l2.py.  
 
     cd ugv_rpi/  

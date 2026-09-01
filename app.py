@@ -367,6 +367,7 @@ def audio_send_thread():
 @socketio.on('connect', namespace='/audio')
 def on_audio_connect():
     print('Client connected to /audio')
+    audio_ctrl.start_audio_capture()
 
 # Web socket
 @socketio.on('json', namespace='/json')
@@ -565,9 +566,6 @@ if __name__ == "__main__":
     # run the main web app
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
-
-    audio_capture_thread = threading.Thread(target=audio_ctrl.audio_capture_thread, daemon=True)
-    audio_capture_thread.start()
 
     audio_send_thread = threading.Thread(target=audio_send_thread, daemon=True)
     audio_send_thread.start()
