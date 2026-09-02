@@ -144,37 +144,54 @@ sudo apt install -y libopenblas-dev libatlas3-base libcamera-dev python3-opencv 
 sudo apt install -y git-lfs fonts-wqy-zenhei util-linux procps hostapd iproute2 iw haveged dnsmasq iptables espeak git-lfs
 
 
-echo "# Create a Python virtual environment."
-# Create a Python virtual environment
-cd $PWD
-python -m venv --system-site-packages /home/$(logname)/ugv_rpi/ugv-env
+UGV_USER="${SUDO_USER:-$(logname)}"
+if [ -z "$UGV_USER" ] || [ "$UGV_USER" = "root" ]; then
+  echo "Cannot determine the login user. Run this script with: sudo ./setup.sh"
+  echo "from a normal user session (not a root login)."
+  exit 1
+fi
 
-echo "# Activate a Python virtual environment."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+EXPECTED_REPO="/home/${UGV_USER}/ugv_rpi"
+
+if [ ! -f "$REPO_DIR/requirements.txt" ] || [ ! -f "$REPO_DIR/app.py" ]; then
+  echo "Could not find ugv_rpi files next to this script ($SCRIPT_DIR)."
+  exit 1
+fi
+
+if [ "$REPO_DIR" != "$EXPECTED_REPO" ]; then
+  echo "This project must be cloned to $EXPECTED_REPO"
+  echo "Found: $REPO_DIR"
+  echo "autorun.sh and the systemd services use $EXPECTED_REPO"
+  exit 1
+fi
+
+cd "$REPO_DIR"
+
+echo "# Create a Python virtual environment."
+python -m venv --system-site-packages "$REPO_DIR/ugv-env"
+chown -R "$UGV_USER:$UGV_USER" "$REPO_DIR/ugv-env"
 
 echo "# Install dependencies from requirements.txt"
-# Install dependencies from requirements.txt
 if $use_index; then
-  sudo -H -u $USER bash -c 'source /home/$(logname)/ugv_rpi/ugv-env/bin/activate && pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r $PWD/requirements.txt && deactivate'
+  sudo -H -u "$UGV_USER" bash -c "source '$REPO_DIR/ugv-env/bin/activate' && pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r '$REPO_DIR/requirements.txt' && deactivate"
 else
-  sudo -H -u $USER bash -c 'source /home/$(logname)/ugv_rpi/ugv-env/bin/activate && pip install -r /home/$(logname)/ugv_rpi/requirements.txt && deactivate'
+  sudo -H -u "$UGV_USER" bash -c "source '$REPO_DIR/ugv-env/bin/activate' && pip install -r '$REPO_DIR/requirements.txt' && deactivate"
 fi
 
 echo "# Add current user to group so it can use serial."
-sudo usermod -aG dialout $USER
+usermod -aG dialout "$UGV_USER"
 
 # Audio Config
 echo "# Audio Config."
-sudo cp -v -f /home/$(logname)/ugv_rpi/asound.conf /etc/asound.conf
+cp -v -f "$REPO_DIR/asound.conf" /etc/asound.conf
 
 # OAK Config
-sudo cp -v -f /home/$(logname)/ugv_rpi/99-dai.rules /etc/udev/rules.d/99-dai.rules
-sudo udevadm control --reload-rules
-sudo udevadm trigger
+cp -v -f "$REPO_DIR/99-dai.rules" /etc/udev/rules.d/99-dai.rules
+udevadm control --reload-rules
+udevadm trigger
 
-echo "Setup completed. Please to reboot your Raspberry Pi for the changes to take effect."
-
-echo "Use the command below to run app.py onboot."
-
-echo "sudo chmod +x autorun.sh"
-
+echo "Setup completed. Reboot after you finish the remaining Quick Install steps."
+echo "Next (from $SCRIPT_DIR, without sudo):"
 echo "./autorun.sh"

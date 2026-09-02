@@ -67,22 +67,35 @@ echo "systemctl --user start ugv-jupyter.service"
 echo "Logs: journalctl --user -u ugv-app.service -f"
 echo "      journalctl --user -u ugv-jupyter.service -f"
 
-read -p "Do you want to install ROARM Web App service? [y/N]: " INSTALL_ROARM
-INSTALL_ROARM=${INSTALL_ROARM:-N}  
+ROARM_DIR="$USER_HOME/roarm_web_app"
+START_ROARM="$USER_HOME/ugv_rpi/scripts/start_roarm_web_app.sh"
 
-if [[ "$INSTALL_ROARM" =~ ^[Yy]$ ]]; then
-    echo "Installing ROARM Web App service..."
+if [ ! -d "$ROARM_DIR" ] || [ ! -f "$ROARM_DIR/package.json" ]; then
+    echo "RoArm 3D preview is optional and is not installed at $ROARM_DIR. Skipping that service."
+    echo "To add it later: clone branch ugv_roarm to ~/roarm_web_app, Node.js 20, npm install --legacy-peer-deps, npm run build,"
+    echo "then re-run ./autorun.sh and answer y. See README: Optional: RoArm 3D preview."
+elif [ ! -d "$ROARM_DIR/.next" ]; then
+    echo "RoArm 3D preview is optional. $ROARM_DIR exists but has not been built. Skipping that service."
+    echo "To enable it: cd $ROARM_DIR && npm install --legacy-peer-deps && npm run build"
+    echo "Then re-run ./autorun.sh and answer y."
+else
+    read -p "Enable optional ROARM Web App service (3D preview)? [y/N]: " INSTALL_ROARM
+    INSTALL_ROARM=${INSTALL_ROARM:-N}
 
-    ROARM_SERVICE="$SYSTEMD_DIR/roarm_web_app.service"
-    cat > "$ROARM_SERVICE" <<EOL
+    if [[ "$INSTALL_ROARM" =~ ^[Yy]$ ]]; then
+        echo "Installing ROARM Web App service..."
+        chmod +x "$START_ROARM"
+
+        ROARM_SERVICE="$SYSTEMD_DIR/roarm_web_app.service"
+        cat > "$ROARM_SERVICE" <<EOL
 [Unit]
 Description=ROARM Web App
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/bin/bash -c "$USER_HOME/ugv_rpi/scripts/start_roarm_web_app.sh >> $USER_HOME/roarm_web_app/roarm_web_app.log 2>&1"
-WorkingDirectory=$USER_HOME/roarm_web_app
+ExecStart=/bin/bash -c "$START_ROARM >> $ROARM_DIR/roarm_web_app.log 2>&1"
+WorkingDirectory=$ROARM_DIR
 Restart=always
 RestartSec=5
 StartLimitBurst=5
@@ -95,9 +108,10 @@ Environment=PATH=/usr/bin:/bin:/usr/local/bin
 WantedBy=default.target
 EOL
 
-    systemctl --user daemon-reload
-    systemctl --user enable roarm_web_app.service
+        systemctl --user daemon-reload
+        systemctl --user enable roarm_web_app.service
 
-    echo "ROARM Web App service installed and enabled."
-    echo "You can start it with: systemctl --user start roarm_web_app.service"
+        echo "ROARM Web App service installed and enabled."
+        echo "You can start it with: systemctl --user start roarm_web_app.service"
+    fi
 fi

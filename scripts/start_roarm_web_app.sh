@@ -1,5 +1,10 @@
 #!/bin/bash
 ROARM_DIR="${HOME}/roarm_web_app"
+if [ ! -d "$ROARM_DIR" ] || [ ! -f "$ROARM_DIR/package.json" ]; then
+    echo "roarm_web_app is not installed at $ROARM_DIR" >&2
+    echo "Install it first (see ugv_rpi README Quick Install), then start this service." >&2
+    exit 1
+fi
 cd "$ROARM_DIR" || exit 1
 
 export PATH=/usr/bin:/bin:/usr/local/bin:$PATH

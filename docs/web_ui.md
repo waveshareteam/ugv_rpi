@@ -115,7 +115,7 @@ Two buttons on the video overlay (not shown on a pan-tilt):
 | **Pose** | End-effector X / Y | Pitch / roll | Z | Look-ahead / home pose |
 | **Joint** | Base / shoulder | Roll / wrist | Elbow | Look-ahead / home pose |
 
-The vertical slider is gripper opening (**G:**). **RoArm View** (iframe on the right) is a 3D preview, not a second controller. It needs the optional `roarm_web_app` service on port **3000** (`autorun.sh` can install it). If that service is not running, the preview is blank.
+The vertical slider is gripper opening (**G:**). **RoArm View** (iframe on the right) is a 3D preview, not a second controller. It is **optional** (RoArm-M2 / RoArm-M3 only). If you want it, install `roarm_web_app` to `~/roarm_web_app` before `autorun.sh` and enable the service when asked; see [README Quick Install](../README.md). If that service is not running, the preview is blank.
 
 `s XY` does not choose the gripper model. `gripper_type` in `config.yaml` only switches the 3D preview: `0` → `roarm_m2`, any other value → `roarm_m2_ga` (M2 with gripper). Edit the yaml and reload the page.
 

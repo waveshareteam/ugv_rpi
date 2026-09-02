@@ -45,41 +45,69 @@ This app is already installed on the SD card of **UGV Rover**, **UGV Beast** and
 To **upgrade** an existing upper-computer install, or to **install** this program on a fresh Raspberry Pi OS, follow **Quick Install** below. Product wiki (host-computer notes): [UGV Rover](https://www.waveshare.com/wiki/UGV-Rover), [UGV01](https://www.waveshare.com/wiki/UGV01), [UGV02](https://www.waveshare.com/wiki/UGV02).
 
 
-### Download the repo from github
+Run the steps **in order**. Always `cd` with a `~/...` path (not a relative `ugv_rpi/`). Clone the repo to **`~/ugv_rpi`** — `setup.sh` / `autorun.sh` / systemd services all use that location. **RoArm 3D preview is optional** (RoArm-M2 / M3 only); skip that section unless you need it.
 
-You can clone this repository from Waveshare's GitHub to your local machine.
+### 1. Clone ugv_rpi
 
+    cd ~
     git clone -b refactor/debian12-2025.10.01-py3.11 https://github.com/waveshareteam/ugv_rpi.git
-
-### Grant execution permission to the mediamtx 
-    cd ugv_rpi/
+    cd ~/ugv_rpi
     sudo chmod +x controllers/Mediamtx/mediamtx
-### Grant execution permission to the installation script
-    cd ugv_rpi/scripts/
-    sudo chmod +x setup.sh
-    sudo chmod +x autorun.sh
-    sudo chmod +x start_jupyter.sh
-### Install app (it'll take a while before finish)
-    cd ugv_rpi/scripts/
-    sudo ./setup.sh
-### Download speech synthesis model file
-`setup.sh` installs `git-lfs`. Pull the TTS model after that:
 
-    cd ugv_rpi/
+### 2. Run setup.sh (from scripts/)
+
+`setup.sh` lives in `scripts/` and must be started with **sudo**. It always installs into `~/ugv_rpi` (venv, `requirements.txt`, `asound.conf`), even if your shell was elsewhere. Still run it from `scripts/` as below.
+
+    cd ~/ugv_rpi/scripts
+    sudo chmod +x setup.sh autorun.sh start_jupyter.sh start_roarm_web_app.sh
+    sudo ./setup.sh
+
+This takes a while. It also installs `git-lfs`. Then pull the TTS model from the **repo root** (not from `scripts/`):
+
+    cd ~/ugv_rpi
     git lfs pull
-### Autorun setup
-    cd ugv_rpi/scripts/
+
+### Optional: RoArm 3D preview (skip unless you use a robotic arm)
+
+Only for **RoArm-M2** / **RoArm-M3**. Chassis-only and Camera PT robots can skip this. If you want the 3D preview, do it **before** `autorun.sh` (step 3), then answer `y` when asked. You can also install it later and run `./autorun.sh` again.
+
+It is a separate Node.js app. Clone it to **`~/roarm_web_app`** (not inside `ugv_rpi`). `autorun.sh` only enables the user service.
+
+    cd ~
+    git clone -b ugv_roarm https://github.com/waveshareteam/roarm_web_app.git
+    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - && sudo apt-get install -y nodejs
+    cd ~/roarm_web_app
+    npm install --legacy-peer-deps
+    npm run build
+
+### 3. Autorun (from scripts/, without sudo)
+
+    cd ~/ugv_rpi/scripts
     ./autorun.sh
-### AccessPopup installation
-    cd ugv_rpi/AccessPopup
+
+`autorun.sh` will ask whether to enable the **optional** RoArm 3D preview service. Answer `y` only if you installed it in the optional section above. If `~/roarm_web_app` is not installed, it skips that service; the rest of ugv_rpi still starts.
+
+### 4. AccessPopup (from AccessPopup/, with sudo)
+
+`installconfig.sh` copies `./accesspopup` from the **current** directory, so you must be in `AccessPopup/` (not `scripts/`).
+
+    cd ~/ugv_rpi/AccessPopup
     sudo chmod +x installconfig.sh
     sudo ./installconfig.sh
-    *Input 1: Install AccessPopup
-    *Press any key to exit
-    *Input 9: Exit installconfig.sh
-### Increase the file monitoring limit inotify
-    echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf && sudo sysctl -p 
-### Reboot Device
+
+In the menu:
+
+    1  Install AccessPopup
+    (press any key)
+    8  Additional Menu
+    1  Web Interface — enable & disable switch  (AccessPopup web UI on port 8052)
+    (press any key)
+    5  Back to the Main menu
+    9  Exit
+
+### 5. inotify limit, then reboot
+
+    echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf && sudo sysctl -p
     sudo reboot
 
 After powering on the robot, the Raspberry Pi will automatically establish a hotspot, and the LED screen will display a series of system initialization messages:  
@@ -93,7 +121,7 @@ After powering on the robot, the Raspberry Pi will automatically establish a hot
 
 You can access the robot web app using a mobile phone or PC. Simply open your browser and enter `[IP]:5000` (for example, `192.168.10.50:5000`) in the URL bar to control the robot.  
 
-For how to use the control page (drive, camera, CV, keyboard, and gamepad), see [Web UI](docs/web_ui.md). A USB gamepad can be plugged into the **PC** (browser) or into the **Raspberry Pi** (onboard `joy_ctrl`); do not use both at once. The optional arm 3D preview (**RoArm View**) uses port **3000** if you installed `roarm_web_app` during `autorun.sh`.  
+For how to use the control page (drive, camera, CV, keyboard, and gamepad), see [Web UI](docs/web_ui.md). A USB gamepad can be plugged into the **PC** (browser) or into the **Raspberry Pi** (onboard `joy_ctrl`); do not use both at once. The arm 3D preview (**RoArm View**, port **3000**) is **optional** — only for RoArm-M2 / RoArm-M3; see **Optional: RoArm 3D preview** above. AccessPopup WiFi helper web UI is on port **8052** after you install it from `installconfig.sh` menu **8 → 1**.  
 
 To access JupyterLab, use `[IP]:8888` (for example, `192.168.10.50:8888`).  
 
@@ -108,9 +136,9 @@ In this command, the `s` directive denotes a robot-type setting. The first digit
 ### v4l2.py error
 If the program fails to run and encounters errors related to v4l2.py during runtime, you need to delete v4l2.py from both the Python virtual environment and the user environment. This will allow the program to automatically use the system-wide v4l2.py.  
 
-    cd ugv_rpi/  
-    sudo rm ugv-env/lib/python3.11/site-packages/v4l2.py  
-    sudo rm /home/[your_user_name]/.local/lib/python3.11/site-packages/v4l2.py  
+    cd ~/ugv_rpi
+    sudo rm ugv-env/lib/python3.11/site-packages/v4l2.py
+    sudo rm ~/.local/lib/python3.11/site-packages/v4l2.py  
 
 Now you can restart the main program app.py.
 
