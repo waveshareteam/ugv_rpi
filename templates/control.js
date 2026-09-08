@@ -387,12 +387,12 @@ try {
     console.log(e);
 }
 document.addEventListener('touchmove', (e) => {
-    e.preventDefault();
     if (isDragging && isEnlarged) {
+        e.preventDefault();
         const touch = e.touches[0];
         moveStick(touch);
     }
-});
+}, { passive: false });
 try {
     stick.addEventListener('touchend', (e) => {
         //e.preventDefault();
@@ -579,6 +579,7 @@ function removeButtonsClass(buttons) {
 }
 //remove all ico class
 function removeAllIcoClass(ElName){
+    if (!ElName) return;
     while (ElName.classList.length > 0) {
         ElName.classList.remove(ElName.classList.item(0));
     }
@@ -600,7 +601,7 @@ socket.on('update', function(data) {
     }
     try {
         var baseBtn = document.getElementById("base_led_ctrl_btn");
-        var BButtons = baseBtn.getElementsByTagName("button");
+        var BButtons = baseBtn ? baseBtn.getElementsByTagName("button") : [];
         removeButtonsClass(BButtons);
         if (data[base_light] == 0) {
             BButtons[0].classList.add("ctl_btn_active");
@@ -609,20 +610,20 @@ socket.on('update', function(data) {
         }
 
         var advCBtn = document.getElementById("adv_cv_ctrl_btn");
-        var CButtons = advCBtn.getElementsByTagName("button");
+        var CButtons = advCBtn ? advCBtn.getElementsByTagName("button") : [];
         removeButtonsClass(CButtons);
 
         var advFBtn = document.getElementById("adv_cv_funcs_btn");
-        var FButtons = advFBtn.getElementsByTagName("button");
+        var FButtons = advFBtn ? advFBtn.getElementsByTagName("button") : [];
         removeButtonsClass(FButtons);
 
         var mpBtn = document.getElementById("mp_funcs_btn");
-        var MPButtons = mpBtn.getElementsByTagName("button");
+        var MPButtons = mpBtn ? mpBtn.getElementsByTagName("button") : [];
         removeButtonsClass(MPButtons);
 
         var dtIco = document.getElementById("DT");
-        var dTypeBtn = document.getElementById("d_type_btn");
-        var DTbuttons = dTypeBtn.getElementsByTagName("button");
+        var dTypeBtn = document.getElementById("d_type_btn") || document.getElementById("d_simple_btn");
+        var DTbuttons = dTypeBtn ? dTypeBtn.getElementsByTagName("button") : [];
         removeAllIcoClass(dtIco);
         removeButtonsClass(DTbuttons);
         if (data[detect_type] == cv_none) {
@@ -662,7 +663,7 @@ socket.on('update', function(data) {
 
         var drIco = document.getElementById("DR");
         var DReactionBtn = document.getElementById("d_reaction_btn");
-        var DRbuttons = DReactionBtn.getElementsByTagName("button");
+        var DRbuttons = DReactionBtn ? DReactionBtn.getElementsByTagName("button") : [];
         removeButtonsClass(DRbuttons);
         if (data[detect_react] == re_none) {
             removeAllIcoClass(drIco);
@@ -680,7 +681,7 @@ socket.on('update', function(data) {
 
         lightMode = document.getElementById("MODE");
         var lightCtrlBtn = document.getElementById("light_ctrl_btn");
-        var lbuttons = lightCtrlBtn.getElementsByTagName("button");
+        var lbuttons = lightCtrlBtn ? lightCtrlBtn.getElementsByTagName("button") : [];
         removeButtonsClass(lbuttons);
         light_mode = data[led_mode];
         if (data[led_mode] == 0) {
@@ -744,7 +745,6 @@ function cmdSend(inputA, inputB, inputC){
 }
 
 function cmdJsonCmd(jsonData){
-    console.log(jsonData);
     if (jsonData.T == cmd_movition_ctrl) {
         heartbeat_left = jsonData.L;
         heartbeat_right = jsonData.R;
@@ -754,10 +754,49 @@ function cmdJsonCmd(jsonData){
     socketJson.emit('json', jsonData);
 }
 
+// ── D-pad (on-screen 3x3 motor pad) ──────────────────────────────────────
+// Grid layout (matches the .ctl9_base_btnN arrow positions in style.css):
+//   7  8  9   = back-left / back / back-right
+//   4  5  6   = spin-left / STOP / spin-right
+//   1  2  3   = fwd-left / forward / fwd-right
+// L/R are signed wheel speeds for the 4-wheel differential base (T:1),
+// scaled by speed_rate exactly like the WASD keyboard driving.
+var dpadActive = false;
+function dpadDown(btn){
+    if (!cmd_movition_ctrl || typeof max_speed === 'undefined' || typeof slow_speed === 'undefined') {
+        return;   // config not loaded yet
+    }
+    var table = {
+        1: {L:  slow_speed, R:  max_speed},
+        2: {L:  max_speed,  R:  max_speed},
+        3: {L:  max_speed,  R:  slow_speed},
+        4: {L: -max_speed,  R:  max_speed},
+        5: {L:  0,          R:  0},
+        6: {L:  max_speed,  R: -max_speed},
+        7: {L: -slow_speed, R: -max_speed},
+        8: {L: -max_speed,  R: -max_speed},
+        9: {L: -max_speed,  R: -slow_speed}
+    };
+    var s = table[btn] || table[5];
+    dpadActive = true;
+    heartbeat_left  = s.L;
+    heartbeat_right = s.R;
+    cmdJsonCmd({'T':cmd_movition_ctrl,'L':s.L,'R':s.R});
+}
+function dpadUp(){
+    dpadActive = false;
+    heartbeat_left  = 0;
+    heartbeat_right = 0;
+    if (cmd_movition_ctrl) {
+        cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});
+    }
+}
+
 function speedCtrl(inputSpd){
     speed_rate = inputSpd;
     defaultSpeed = speed_rate;
     var spdCtrlBtn = document.getElementById("speed_ctrl_btn");
+    if (!spdCtrlBtn) return;
     var spdbuttons = spdCtrlBtn.getElementsByTagName("button");
     removeButtonsClass(spdbuttons);
     if (speed_rate <= 0.30) {
@@ -773,8 +812,10 @@ var steady_mode = false;
 function steadyCtrl(inputCmd, inputBias){
     inputBias = -inputBias*0.4;
     var steadyCtrlBtn = document.getElementById("steady_ctrl_btn");
-    var steadybuttons = steadyCtrlBtn.getElementsByTagName("button");
-    removeButtonsClass(steadybuttons);
+    if (steadyCtrlBtn) {
+        var steadybuttons = steadyCtrlBtn.getElementsByTagName("button");
+        removeButtonsClass(steadybuttons);
+    }
     if (inputCmd == 0) {
         steadybuttons[0].classList.add("ctl_btn_active");
         steady_mode = false;
@@ -836,14 +877,16 @@ function moveProcess() {
     if(move_buttons.shift == 1) {
         speed_rate = max_rate;
         var spdCtrlBtn = document.getElementById("speed_ctrl_btn");
-        var spdbuttons = spdCtrlBtn.getElementsByTagName("button");
+        var spdbuttons = spdCtrlBtn ? spdCtrlBtn.getElementsByTagName("button") : [];
         removeButtonsClass(spdbuttons);
-        if (speed_rate <= 0.33) {
-            spdbuttons[0].classList.add("ctl_btn_active");
-        } else if (speed_rate > 0.33 && speed_rate < 0.66) {
-            spdbuttons[1].classList.add("ctl_btn_active");
-        } else if (speed_rate >= 0.66) {
-            spdbuttons[2].classList.add("ctl_btn_active");
+        if (spdbuttons.length) {
+            if (speed_rate <= 0.33) {
+                spdbuttons[0].classList.add("ctl_btn_active");
+            } else if (speed_rate > 0.33 && speed_rate < 0.66) {
+                spdbuttons[1].classList.add("ctl_btn_active");
+            } else if (speed_rate >= 0.66) {
+                spdbuttons[2].classList.add("ctl_btn_active");
+            }
         }
     } else {
         speedCtrl(defaultSpeed);
@@ -1037,7 +1080,8 @@ function lookAhead() {
     }
 }
 
-document.getElementById('sendButton').addEventListener('click', function() {
+var sendBtnEl = document.getElementById('sendButton');
+if (sendBtnEl) sendBtnEl.addEventListener('click', function() {
     var command = document.getElementById('commandInput').value;
     fetch('/send_command', {
         method: 'POST',
@@ -1056,25 +1100,27 @@ document.getElementById('sendButton').addEventListener('click', function() {
     });
 });
 
-document.getElementById('commandInput').addEventListener('focus', function() {
-    isInputFocused = true;
-});
-
-document.getElementById('commandInput').addEventListener('blur', function() {
-    isInputFocused = false;
-});
-
-
-
-
+var cmdInputEl = document.getElementById('commandInput');
+if (cmdInputEl) {
+    cmdInputEl.addEventListener('focus', function() {
+        isInputFocused = true;
+    });
+    cmdInputEl.addEventListener('blur', function() {
+        isInputFocused = false;
+    });
+}
 
 
-// gamepad ctrl functions
+
+
+
+
+// Updated Variables for Improved Turning Response
 var gp_x = 0.00;
 var gp_z = 0.00;
 var last_gp_x = 0.00;
 var last_gp_z = 0.00;
-var gp_turnning = 3.14;
+var gp_turnning = 5.0; // Increased from 3.14 to 5.0 for faster turning
 
 var last_gp_lt1 = false;
 var last_gp_lt2 = false;
@@ -1088,16 +1134,26 @@ var gp_pt_x = 0;
 var gp_pt_y = 0;
 var last_gp_pt_x = 0;
 var last_gp_pt_y = 0;
-var gp_pt_speed = 1.0;
+var gp_pt_speed = 4.0;
 
-window.addEventListener("gamepadconnected", function(e) {
-  console.log("gamepad connected:" + e.gamepad.index);
-  heartbeat_send_flag = false;
+// NOTE: max_speed comes from config.yaml (see fetch('/config') at the top).
+// The old "var max_speed = 4.5" here overwrote it and made gamepad driving
+// wildly too fast - removed.
+var gp_turnning = 4.5; // gamepad turning rate
+
+// Reduce the deadzone filtering to make the robot more responsive
+const DEADZONE_THRESHOLD = 0.01; // Reduced from 0.02 to 0.01
+
+window.addEventListener("gamepadconnected", function (e) {
+    console.log("gamepad connected:" + e.gamepad.index);
+    heartbeat_send_flag = false;
+    document.getElementById("gamepad-connection").textContent = "Connected";
 });
 
-window.addEventListener("gamepaddisconnected", function(e) {
-  console.log("gamepad disconnected:" + e.gamepad.index);
-  heartbeat_send_flag = true;
+window.addEventListener("gamepaddisconnected", function (e) {
+    console.log("gamepad disconnected:" + e.gamepad.index);
+    heartbeat_send_flag = true;
+    document.getElementById("gamepad-connection").textContent = "Disconnected";
 });
 
 function logButtons(gamepad) {
@@ -1118,8 +1174,6 @@ function readGamepad() {
   for (var i = 0; i < gamepads.length; i++) {
     var gp = gamepads[i];
     if(gp) {
-      // logButtons(gp);
-      // logAxes(gp);
       gp_x = - gp.axes[1] * max_speed;
       gp_z = - gp.axes[0] * gp_turnning;
       if(Math.abs(gp_x) < 0.02){
@@ -1128,7 +1182,6 @@ function readGamepad() {
       if(Math.abs(gp_z) < 0.02){
         gp_z = 0;
       }
-      // console.log(`X: ${gp_x} Z: ${gp_z}`);
       if(gp_x != last_gp_x || gp_z != last_gp_z){
         cmdJsonCmd({"T":13,"X":gp_x,"Z":gp_z});
         last_gp_x = gp_x;
@@ -1137,26 +1190,11 @@ function readGamepad() {
 
       if(last_gp_record != gp.buttons[9].pressed){
         if (gp.buttons[9].pressed) {
-            if (!isRecording) {
-                cmdSend(vid_sta,0,0);
-                $(document).css("color", "#FF8C8C");
-                $(document).removeClass("video_btn_record");
-                $(document).addClass("video_btn_stop");
-                isRecording = true;
-                $(document).text("00:00");
-                timerInterval = setInterval(updateTimer, 1000);
-            } else {
-                cmdSend(vid_end,0,0);
-                $(document).removeClass("video_btn_stop");
-                $(document).addClass("video_btn_record");
-                $(document).text(originalText);
-                isRecording = false;
-                clearInterval(timerInterval);
-                seconds = 0;
-                minutes = 0;
-                $(document).css("color", "");
-                updateVideoList();
-            }
+            // Reuse the on-screen Record button handler (sends vid_sta/vid_end
+            // and updates the timer UI). The old code called $(document) and
+            // silently broke the page.
+            var recordBtn = document.getElementById("record-btn");
+            if (recordBtn) { $(recordBtn).trigger("click"); }
         }
         last_gp_record = gp.buttons[9].pressed;
       }
@@ -1274,27 +1312,24 @@ function readGamepad() {
 
 window.requestAnimationFrame(readGamepad);
 
-
-
-
-// audio drag & play
-updateAudioFileList();
+// audio drag & play (only exists on pages with the audio panel)
 var audioFilesElement = document.getElementById('audioFiles');
-
-// 拖拽事件监听
-audioFilesElement.addEventListener('dragover', function(event) {
-  event.preventDefault(); // 阻止默认行为
-});
-
-audioFilesElement.addEventListener('drop', function(event) {
-  event.preventDefault(); // 阻止默认行为
-  var files = event.dataTransfer.files; // 获取拖拽的文件
-  uploadFiles(files); // 调用上传函数
-});
+if (audioFilesElement) {
+  updateAudioFileList();
+  // drag & drop listeners
+  audioFilesElement.addEventListener('dragover', function(event) {
+    event.preventDefault();
+  });
+  audioFilesElement.addEventListener('drop', function(event) {
+    event.preventDefault();
+    var files = event.dataTransfer.files;
+    uploadFiles(files);
+  });
+}
 
 function updateAudioFileList() {
     var pauseBtn = document.getElementById('stopButton');
-    pauseBtn.style.visibility = 'visible';
+    if (pauseBtn) pauseBtn.style.visibility = 'visible';
   fetch('/getAudioFiles')
     .then(response => response.json())
     .then(files => {
@@ -1365,7 +1400,8 @@ function uploadFiles(files) {
   }
 }
 
-document.getElementById('stopButton').addEventListener('click', function() {
+var stopBtnEl = document.getElementById('stopButton');
+if (stopBtnEl) stopBtnEl.addEventListener('click', function() {
     fetch('/stop_audio', {
         method: 'POST',
         headers: {
@@ -1383,7 +1419,8 @@ document.getElementById('stopButton').addEventListener('click', function() {
     });
 });
 
-document.getElementById('open_jupyter').addEventListener('click', function() {
+var jupyterEl = document.getElementById('open_jupyter');
+if (jupyterEl) jupyterEl.addEventListener('click', function() {
     var currentUrl = window.location.href;
     var newUrl = currentUrl.replace(/:(\d+)/, ':8888');
     window.open(newUrl, '_blank');

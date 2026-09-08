@@ -1,5 +1,5 @@
 <html lang="en-US">
-  <head>
+<head>
     <title>WAVESHARE ROBOT</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -8,10 +8,97 @@
     <script src="./socket.io.js"></script>
     <link rel="stylesheet" type="text/css" href="./style.css">
     <style type="text/css">
+        .aligned-buttons {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+            justify-content: center;
+        }
+        .aligned-buttons .normal_btn {
+            width: 150px;
+            text-align: center;
+        }
+        #lidar_panel {
+            text-align: center;
+        }
+        #lidar_canvas {
+            width: 420px;
+            height: 420px;
+            max-width: 100%;
+            border: 1px solid rgba(202, 213, 255, 0.1);
+            border-radius: 10px;
+            background-color: rgba(0, 0, 0, 0.25);
+        }
+        #lidar_status_row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            margin-top: 10px;
+        }
+        #lidar_avoid_state {
+            color: #4FF5C0;
+        }
+        /* connection banner + video state (conn.js) */
+        #conn_banner {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            max-width: 640px;
+            margin: 12px auto 0 auto;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 0.95em;
+            transition: background-color 0.3s ease-out;
+        }
+        #conn_banner.conn_hidden { display: none; }
+        #conn_banner.conn_ok   { background-color: rgba(79, 245, 192, 0.15); color: #4FF5C0; }
+        #conn_banner.conn_warn { background-color: rgba(245, 189, 95, 0.18); color: #f5bd5f; }
+        #conn_banner.conn_err  { background-color: rgba(255, 99, 99, 0.18); color: #FF9393; }
+        #conn_banner .conn_dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            background-color: currentColor;
+            animation: conn_pulse 1.6s ease-in-out infinite;
+        }
+        @keyframes conn_pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+        #camera_retry_btn {
+            background-color: rgba(203,213,255,0.12);
+            color: inherit;
+            border: none;
+            border-radius: 3px;
+            padding: 4px 12px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        #camera_retry_btn:hover { background-color: rgba(203,213,255,0.22); }
+        #camera_retry_btn:disabled { opacity: 0.5; cursor: wait; }
+        #video_state {
+            display: none;
+            position: absolute;
+            top: 40%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #f5bd5f;
+            background-color: rgba(20, 20, 24, 0.85);
+            padding: 14px 20px;
+            border-radius: 8px;
+            border: 1px solid rgba(245, 189, 95, 0.4);
+            z-index: 5;
+            font-size: 1.05em;
+            max-width: 420px;
+        }
+        #video_state:empty { display: none; }
     </style>
-  </head>
+</head>
 <body>
     <main>
+        <div id="conn_banner" class="conn_warn conn_hidden">
+            <span class="conn_dot"></span>
+            <span id="conn_msg">Connecting to robot...</span>
+            <button id="camera_retry_btn" style="display:none;">Retry camera</button>
+        </div>
         <div class="box1">
             <section class="section_video box_outline">
                 <div>
@@ -83,146 +170,92 @@
                             </div>
                         </div>
                     </div>
-                    <div class="video"><img src="{{ url_for('video_feed') }}" /></div>
-                    <!-- <div class="video"><video id="remoteVideo" autoplay></video></div> -->
+                    <div class="video"><img src="/video_feed" /><div id="video_state"></div></div>
                 </div>
                 <div class="video_ctrl">
                     <div>
-                        <div class="record"><div><button id="record-btn" class="normal_btn video_btn_record btn_ico">Record</button></div></div>
-                        <div class="capture"><div><button class="normal_btn video_btn_capture" onclick="captureAndUpdate()"></button></div></div>
+                        <div class="record"><button id="record-btn" class="normal_btn video_btn_record btn_ico">Record</button></div>
+                        <div class="capture"><button class="normal_btn video_btn_capture" onclick="captureAndUpdate()"></button></div>
                         <div class="views">
-                            <div><button class="normal_btn normal_btn_size video_btn_zoom btn_ico" id="zoom_btn"></button></div>
-                            <div class="video_btn_px_select">
-                                <button id="video_pixel_btn" class="normal_btn normal_btn_size video_btn_px">WebRTC</button>
-                                <ul id="video_pixel_btn_list">
-                                    <!-- <li class="normal_btn" onclick="cmdSend(max_res,2,0);">960P</li>
-                                    <li class="normal_btn" onclick="cmdSend(mid_res,1,0);">480P</li>
-                                    <li class="normal_btn" onclick="cmdSend(min_res,0,0);">240P</li> -->
-                                </ul>
-                            </div>
+                            <button class="normal_btn normal_btn_size video_btn_zoom btn_ico" id="zoom_btn"></button>
+                            <button id="video_pixel_btn" class="normal_btn normal_btn_size video_btn_px">WebRTC</button>
                         </div>
                     </div>
                 </div>
+
+                <!-- Aligned buttons for Lucy controls -->
+                <div class="aligned-buttons">
+                    <button id="toggle-listen-btn" class="normal_btn">Toggle Listen</button>
+                    <button id="gesture-btn" class="normal_btn">Enable Gesture Control</button>
+                    <button id="start-auto-drive-btn" class="normal_btn">Start Auto-Drive</button>
+                    <button id="stop-auto-drive-btn" class="normal_btn">Stop Auto-Drive</button>
+                    <button id="toggle-lights-btn" class="normal_btn">Toggle Lights</button>
+                    <div id="gamepad-status" class="gamepad-status">Gamepad: <span id="gamepad-connection">Disconnected</span></div>
+                    <button id="force-reboot-btn" class="normal_btn">Force Reboot</button>
+                </div>
+
+                <!-- Control panel with various control buttons -->
                 <div>
                     <div class="controller">
                         <div class="ctl9_middle">
                             <div class="ctl9_middle_pos">
                                 <div class="ctl9_middle_pos ctl9_middle_light">
                                     <div class="ctl9_middle_pos">
-                                        <div 
-                                            onmousedown="cmdSend(head_ct,0,0);" 
-                                            ontouchstart="cmdSend(head_ct,0,0);" 
-                                            onmouseup="cmdSend(head_ct,0,0);" ontouchend="cmdSend(head_ct,0,0);">
-                                        FUNC</div>
+                                        <div
+                                            onmousedown="cmdSend(head_ct,0,0);"
+                                            ontouchstart="cmdSend(head_ct,0,0);"></div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         <div class="ctl9 ctl9_base">
                             <ul>
-                                <li class="ctl9_base_btn" 
-                                onmousedown="cmdJsonCmd({'T':cmd_movition_ctrl,'L':slow_speed,'R':max_speed});" 
-                                ontouchstart="cmdJsonCmd({'T':cmd_movition_ctrl,'L':slow_speed,'R':max_speed});" 
-                                onmouseup="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});" 
-                                ontouchend="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});"></li>
+                                <!-- D-pad: 3x3 grid mapped through dpadDown()/dpadUp() in control.js -->
+                                <li class="ctl9_base_btn"
+                                onmousedown="dpadDown(7);" ontouchstart="dpadDown(7);"
+                                onmouseup="dpadUp();" ontouchend="dpadUp();"></li>
 
-                                <li class="ctl9_base_btn2" 
-                                onmousedown="cmdJsonCmd({'T':cmd_movition_ctrl,'L':max_speed,'R':max_speed});" 
-                                ontouchstart="cmdJsonCmd({'T':cmd_movition_ctrl,'L':max_speed,'R':max_speed});" 
-                                onmouseup="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});" 
-                                ontouchend="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});"></li>
+                                <li class="ctl9_base_btn2"
+                                onmousedown="dpadDown(8);" ontouchstart="dpadDown(8);"
+                                onmouseup="dpadUp();" ontouchend="dpadUp();"></li>
 
-                                <li class="ctl9_base_btn" 
-                                onmousedown="cmdJsonCmd({'T':cmd_movition_ctrl,'L':max_speed,'R':slow_speed});" 
-                                ontouchstart="cmdJsonCmd({'T':cmd_movition_ctrl,'L':max_speed,'R':slow_speed});" 
-                                onmouseup="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});" 
-                                ontouchend="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});"></li>
-                                
-                                <li class="ctl9_base_btn4" 
-                                onmousedown="cmdJsonCmd({'T':cmd_movition_ctrl,'L':-max_speed,'R':max_speed});" 
-                                ontouchstart="cmdJsonCmd({'T':cmd_movition_ctrl,'L':-max_speed,'R':max_speed});" 
-                                onmouseup="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});" 
-                                ontouchend="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});"></li>
-                                
-                                <li class="ctl9_base_btn"></li>
-                                
-                                <li class="ctl9_base_btn6" 
-                                onmousedown="cmdJsonCmd({'T':cmd_movition_ctrl,'L':max_speed,'R':-max_speed});" 
-                                ontouchstart="cmdJsonCmd({'T':cmd_movition_ctrl,'L':max_speed,'R':-max_speed});" 
-                                onmouseup="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});" 
-                                ontouchend="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});"></li>
-                                
-                                <li class="ctl9_base_btn" 
-                                onmousedown="cmdJsonCmd({'T':cmd_movition_ctrl,'L':-slow_speed,'R':-max_speed});" 
-                                ontouchstart="cmdJsonCmd({'T':cmd_movition_ctrl,'L':-slow_speed,'R':-max_speed});" 
-                                onmouseup="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});" 
-                                ontouchend="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});"></li>
-                                
-                                <li class="ctl9_base_btn8" 
-                                onmousedown="cmdJsonCmd({'T':cmd_movition_ctrl,'L':-max_speed,'R':-max_speed});" 
-                                ontouchstart="cmdJsonCmd({'T':cmd_movition_ctrl,'L':-max_speed,'R':-max_speed});" 
-                                onmouseup="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});" 
-                                ontouchend="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});"></li>
-                                
-                                <li class="ctl9_base_btn" 
-                                onmousedown="cmdJsonCmd({'T':cmd_movition_ctrl,'L':-max_speed,'R':-slow_speed});" 
-                                ontouchstart="cmdJsonCmd({'T':cmd_movition_ctrl,'L':-max_speed,'R':-slow_speed});" 
-                                onmouseup="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});" 
-                                ontouchend="cmdJsonCmd({'T':cmd_movition_ctrl,'L':0,'R':0});"></li>
+                                <li class="ctl9_base_btn3"
+                                onmousedown="dpadDown(9);" ontouchstart="dpadDown(9);"
+                                onmouseup="dpadUp();" ontouchend="dpadUp();"></li>
+
+                                <li class="ctl9_base_btn4"
+                                onmousedown="dpadDown(4);" ontouchstart="dpadDown(4);"
+                                onmouseup="dpadUp();" ontouchend="dpadUp();"></li>
+
+                                <li class="ctl9_base_btn5"
+                                onmousedown="dpadDown(5);" ontouchstart="dpadDown(5);"></li>
+
+                                <li class="ctl9_base_btn6"
+                                onmousedown="dpadDown(6);" ontouchstart="dpadDown(6);"
+                                onmouseup="dpadUp();" ontouchend="dpadUp();"></li>
+
+                                <li class="ctl9_base_btn7"
+                                onmousedown="dpadDown(1);" ontouchstart="dpadDown(1);"
+                                onmouseup="dpadUp();" ontouchend="dpadUp();"></li>
+
+                                <li class="ctl9_base_btn8"
+                                onmousedown="dpadDown(2);" ontouchstart="dpadDown(2);"
+                                onmouseup="dpadUp();" ontouchend="dpadUp();"></li>
+
+                                <li class="ctl9_base_btn9"
+                                onmousedown="dpadDown(3);" ontouchstart="dpadDown(3);"
+                                onmouseup="dpadUp();" ontouchend="dpadUp();"></li>
                             </ul>
                         </div>
-                    </div>
-                </div>
-                <div>
-                    <div class="audio_input">
-                        <div class="audio-files">
-                            <div id="audioFiles" class="audio_list">
-                                <div id="audioFilesDrag" class="audio-drop">Drop audio files here!</div>
-                                <!-- <ol>
-                                    <li>1<span class="audioplay"></span><span>Drop audio files here.mp3</span></li>
-                                </ol>-->
-                            </div>
-                            <div style="visibility: hidden;" id="stopButton" class="pause"><div></div></div>
-                        </div>
-                    </div>
-                </div>
-                <div>
-                    <div class="code_input">
                         <div>
-                            <textarea type="text" id="commandInput" placeholder="Enter Command"></textarea>
-                            <div><button id="sendButton" class="normal_btn normal_btn_size normal_btn_w">Send</button></div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-            <section class="section_feed_ctrl box_outline">
-                <div>
-                    <div class="feed_ctrl_btn">
-                        <div>  
-                            <h2 class="sc_title feed_ct_tt">Speed Ctrl</h2>
-                            <div id="speed_ctrl_btn">
-                                <div><button onclick="speedCtrl(min_rate);" class="ctl_btn ctl_btn_active">Slow</button></div>
-                                <div><button onclick="speedCtrl(mid_rate);" class="ctl_btn">Middle</button></div>
-                                <div><button onclick="speedCtrl(max_rate);" class="ctl_btn">Fast</button></div>
-                            </div>
-                        </div>
-                        <div>  
-                            <h2 class="sc_title feed_ct_tt">PT Steady/Ahead</h2>
-                            <div id="steady_ctrl_btn">
-                                <div><button onclick="steadyCtrl(0, stickSendY);" class="ctl_btn ctl_btn_active">OFF</button></div>
-                                <div><button onclick="steadyCtrl(1, stickSendY);" class="ctl_btn">ON</button></div>
-                                <div><button onclick="lookAhead();" class="ctl_btn">Ahead</button></div>
-                            </div>
-                        </div>
-                        <div>  
-                            <h2 class="sc_title feed_ct_tt">Simple Detection Type</h2>
-                            <div id="d_type_btn">
+                            <h2 class="sc_title feed_ct_tt">Simple Detection</h2>
+                            <div id="d_simple_btn">
                                 <div><button onclick="cmdSend(cv_none,0,0);" class="ctl_btn ctl_btn_active">None</button></div>
-                                <div><button onclick="cmdSend(cv_moti,1,0);" class="ctl_btn ctl_btn_mov btn_ico">Movtion</button></div>
-                                <div><button onclick="cmdSend(cv_face,2,0);" class="ctl_btn ctl_btn_faces btn_ico">Faces</button></div>
+                                <div><button onclick="cmdSend(cv_moti,0,0);" class="ctl_btn">MOTION</button></div>
+                                <div><button onclick="cmdSend(cv_face,0,0);" class="ctl_btn">FACE</button></div>
                             </div>
                         </div>
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">Simple Detection Reaction</h2>
                             <div id="d_reaction_btn">
                                 <div><button onclick="cmdSend(re_none,0,0);" class="ctl_btn ctl_btn_active">None</button></div>
@@ -230,7 +263,7 @@
                                 <div><button onclick="cmdSend(re_reco,0,0);" class="ctl_btn ctl_btn_record btn_ico">Record</button></div>
                             </div>
                         </div>
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">Advance CV Ctrl</h2>
                             <div id="adv_cv_ctrl_btn">
                                 <div><button onclick="cmdSend(mc_lock,0,0);" class="ctl_btn">LOCK</button></div>
@@ -238,7 +271,7 @@
                                 <div><button onclick="cmdSend(cv_auto,0,0);" class="ctl_btn">AUTODRIVE</button></div>
                             </div>
                         </div>
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">Advance CV Funcs</h2>
                             <div id="adv_cv_funcs_btn">
                                 <div><button onclick="cmdSend(cv_objs,0,0);" class="ctl_btn">OBJECTS</button></div>
@@ -246,14 +279,14 @@
                                 <div><button onclick="cmdSend(mp_hand,0,0);" class="ctl_btn">HAND GS</button></div>
                             </div>
                         </div>
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">MediaPipe Funcs</h2>
                             <div id="mp_funcs_btn">
                                 <div><button onclick="cmdSend(mp_face,0,0);" class="ctl_btn">MP FACE</button></div>
                                 <div><button onclick="cmdSend(mp_pose,0,0);" class="ctl_btn">MP POSE</button></div>
                             </div>
                         </div>
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">Head Light Ctrl</h2>
                             <div id="light_ctrl_btn">
                                 <div><button onclick="cmdSend(led_off,0,0);" class="ctl_btn ctl_btn_active">OFF</button></div>
@@ -261,13 +294,26 @@
                                 <div><button onclick="cmdSend(led_ton,0,0);" class="ctl_btn">ON</button></div>
                             </div>
                         </div>
-                        <div>  
+                        <div>
                             <h2 class="sc_title feed_ct_tt">Base Light Ctrl</h2>
                             <div id="base_led_ctrl_btn">
                                 <div><button onclick="cmdSend(base_of,0,0);" class="ctl_btn">BASE OFF</button></div>
                                 <div><button onclick="cmdSend(base_on,0,0);" class="ctl_btn">BASE ON</button></div>
                             </div>
                         </div>
+
+                        <!-- LIDAR radar panel -->
+                        <div>
+                            <h2 class="sc_title feed_ct_tt">LIDAR Radar</h2>
+                            <div id="lidar_panel">
+                                <canvas id="lidar_canvas" width="420" height="420"></canvas>
+                                <div id="lidar_status_row">
+                                    <span id="lidar_avoid_state">LIDAR: ...</span>
+                                    <button id="lidar_toggle_btn" class="ctl_btn" style="width:180px;height:40px;">Enable Avoidance</button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="long_btn new_page" id="open_jupyter">
                             <a target="_blank" style="color: #f5bd5f;" href="/"><span>JupyterLab</span>&nbsp;<span>&gt;</span></a>
                         </div>
@@ -275,12 +321,13 @@
                 </div>
             </section>
         </div>
+
+        <!-- Additional boxes for gallery and settings -->
         <div class="box2">
             <section>
                 <div class="photo_gallery">
                     <h2 class="sc_title normal_sc_title">Photo Gallery</h2>
-                    <ul id="photo-list">
-                    </ul>
+                    <ul id="photo-list"></ul>
                     <div class="long_btn new_page">
                         <a href="./photo.html"><span>View Photo Gallery Page</span>&nbsp;(<span id="number-photos">0</span>)&nbsp;<span>&gt;</span></a>
                     </div>
@@ -289,8 +336,7 @@
             <section>
                 <div class="video_files">
                     <h2 class="sc_title normal_sc_title">Video Files</h2>
-                    <ul class="video-list" id="video-list">
-                    </ul>
+                    <ul class="video-list" id="video-list"></ul>
                     <div class="long_btn new_page">
                         <a href="./video.html"><span>View Video Files Page</span>&nbsp;(<span id="number-videos">0</span>)&nbsp;<span>&gt;</span></a>
                     </div>
@@ -299,33 +345,78 @@
             <section>
                 <div>
                     <h2 id="test" class="sc_title normal_sc_title">Bus Servos Initialization Setup</h2>
-                    <div class="long_btn new_page ">
+                    <div class="long_btn new_page">
                         <a class="btn_ico ico_setting" href="./settings.html"><span>Setting Page</span>&nbsp;<span>&gt;</span></a>
                     </div>
                 </div>
             </section>
         </div>
     </main>
+
+    <!-- Hidden video delete notification -->
     <div id="video-del-tips" class="video-del-tips"><p>Successfully deleted video</p></div>
-    <footer style="visibility: hidden;">
-        <div style="background-image: url('./img/white/record.svg');"></div>
-        <div style="background-image: url('./img/white/capture.svg');"></div>
-        <div style="background-image: url('./img/white/zoom.svg');"></div>
-        <div style="background-image: url('./img/white/ctrl_arrow.svg');"></div>
-        <div style="background-image: url('./img/white/faces.svg');"></div>
-        <div style="background-image: url('./img/white/movtion.svg');"></div>
-        <div style="background-image: url('./img/white/none.svg');"></div>
-        <div style="background-image: url('./img/white/delete.svg');"></div>
-        <div style="background-image: url('./img/grey/record.svg');"></div>
-        <div style="background-image: url('./img/grey/capture.svg');"></div>
-        <div style="background-image: url('./img/grey/zoom.svg');"></div>
-        <div style="background-image: url('./img/grey/ctrl_arrow.svg');"></div>
-        <div style="background-image: url('./img/grey/faces.svg');"></div>
-        <div style="background-image: url('./img/grey/movtion.svg');"></div>
-        <div style="background-image: url('./img/grey/delete.svg');"></div>
-    </footer>
-    <!-- <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.0/jquery.min.js"></script> -->
+
     <script src="./control.js"></script>
+    <script src="./lidar.js"></script>
+    <script src="./conn.js"></script>
     <script src="./main.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('#toggle-listen-btn').click(function() {
+                $.post('/toggle_listen', function(response) {
+                    alert(response.message);
+                }).fail(function() {
+                    alert('Failed to toggle listen mode');
+                });
+            });
+            $('#gesture-btn').click(function() {
+                $.post('/toggle_gesture', { enable: true }, function(response) {
+                    alert(response.message);
+                }).fail(function() {
+                    alert('Failed to toggle gesture control');
+                });
+            });
+            $('#start-auto-drive-btn').click(function() {
+                var $btn = $(this);
+                $btn.prop('disabled', true);
+                $.post('/execute_command', { command: 'start_auto_drive' }, function(response) {
+                    $btn.text('Auto-drive ON').css('color', '#4FF5C0');
+                    $('#stop-auto-drive-btn').css('color', '');
+                }).fail(function() {
+                    alert('Failed to start auto-drive - is the robot reachable?');
+                }).always(function() { $btn.prop('disabled', false); });
+            });
+            $('#stop-auto-drive-btn').click(function() {
+                var $btn = $(this);
+                $btn.prop('disabled', true);
+                $.post('/execute_command', { command: 'stop_auto_drive' }, function(response) {
+                    $btn.text('Auto-drive OFF').css('color', '#FF9393');
+                    $('#start-auto-drive-btn').css('color', '');
+                }).fail(function() {
+                    alert('Failed to stop auto-drive - is the robot reachable?');
+                }).always(function() { $btn.prop('disabled', false); });
+            });
+            $('#toggle-lights-btn').click(function() {
+                var $btn = $(this);
+                $btn.prop('disabled', true);
+                $.post('/toggle_lights', function(response) {
+                    $btn.text(response.message || 'Done');
+                    setTimeout(function() { $btn.text('Toggle Lights'); }, 1500);
+                }).fail(function() {
+                    alert('Failed to toggle lights - is the robot reachable?');
+                }).always(function() { $btn.prop('disabled', false); });
+            });
+            $('#force-reboot-btn').click(function() {
+                if (confirm("Are you sure you want to force reboot the system?")) {
+                    $.post('/force_reboot', function(response) {
+                        alert(response.message);
+                    }).fail(function() {
+                        alert('Failed to trigger reboot');
+                    });
+                }
+            });
+        });
+    </script>
+
 </body>
 </html>

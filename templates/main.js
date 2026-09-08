@@ -1,33 +1,83 @@
-// Create a new RTCPeerConnection instance
-let pc = new RTCPeerConnection();
+// WebRTC receiver (optional low-latency view).
+// The stock aiortc /offer on the robot expects an SDP *offer* from the browser
+// and answers with its own.  If the server is unreachable or errors out we
+// fall back silently to the MJPEG stream that is already running, so this
+// script can never break the page.
 
-// Function to send an offer request to the server
+let pc = null;
+
 async function createOffer() {
-    console.log("Sending offer request");
+    console.log("[WebRTC] sending offer request");
+    try {
+        pc = new RTCPeerConnection();
 
-    // Fetch the offer from the server
-    const offerResponse = await fetch("/offer", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-            sdp: "",
-            type: "offer",
-        }),
-    });
+        // We only want to RECEIVE audio/video from the robot.
+        pc.addTransceiver('video', { direction: 'recvonly' });
+        pc.addTransceiver('audio', { direction: 'recvonly' });
 
-    // Parse the offer response
-    const offer = await offerResponse.json();
-    console.log("Received offer response:", offer);
+        pc.ontrack = function (event) {
+            console.log("[WebRTC] track received:", event.track.kind);
+            const videoEl = document.getElementById('remoteVideo');
+            if (videoEl) {
+                if (videoEl.srcObject !== event.streams[0]) {
+                    videoEl.srcObject = event.streams[0];
+                }
+            }
+        };
 
-    // Set the remote description based on the received offer
-    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        pc.onconnectionstatechange = function () {
+            console.log("[WebRTC] connection state:", pc.connectionState);
+        };
 
-    // Create an answer and set it as the local description
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        // Wait for ICE gathering so the SDP includes candidate lines
+        await new Promise((resolve) => {
+            if (pc.iceGatheringState === 'complete') return resolve();
+            const t = setTimeout(resolve, 1500);   // don't hang forever
+            pc.onicegatheringstatechange = () => {
+                if (pc.iceGatheringState === 'complete') {
+                    clearTimeout(t);
+                    resolve();
+                }
+            };
+        });
+
+        const controller = new AbortController();
+        const abortT = setTimeout(() => controller.abort(), 5000); // never wait longer
+        let response;
+        try {
+            response = await fetch("/offer", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    sdp: pc.localDescription.sdp,
+                    type: pc.localDescription.type,
+                }),
+                signal: controller.signal,
+            });
+        } finally {
+            clearTimeout(abortT);
+        }
+
+        if (!response.ok) {
+            console.warn("[WebRTC] /offer returned", response.status, "- falling back to MJPEG");
+            pc.close();
+            pc = null;
+            return;
+        }
+
+        const answer = await response.json();
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log("[WebRTC] answer applied");
+    } catch (err) {
+        console.warn("[WebRTC] setup failed, using MJPEG stream instead:", err);
+        if (pc) { try { pc.close(); } catch (e) {} pc = null; }
+    }
 }
 
-// Trigger the process by creating and sending an offer
-createOffer();
+// Only auto-start on pages that actually have a WebRTC <video> element
+if (document.getElementById('remoteVideo')) {
+    createOffer();
+}

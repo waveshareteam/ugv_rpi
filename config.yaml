@@ -19,7 +19,7 @@ base_config:
   module_type: 0
   robot_name: UGV Rover
   sbc_version: 0.91
-  use_lidar: false
+  use_lidar: true
 cmd_config:
   cmd_arm_ctrl_ui: 144
   cmd_gimbal_base_ctrl: 141
