@@ -6,7 +6,7 @@ import threading
 import numpy as np
 import math
 import time
-import openai  # Import OpenAI if using their API
+import random
 import yaml
 import serial
 import torch
@@ -43,8 +43,7 @@ logging.basicConfig(filename='Log.txt',
 
 logging.basicConfig(filename='log_commands.txt', level=logging.INFO, format='%(asctime)s - %(message)s')
 
-# Initialize the OpenAI API with your API key
-openai.api_key = "sk-proj-REDACTED"
+# NOTE: the old OpenAI API key was removed — Lance uses the local Ollama model.
 logging.basicConfig(level=logging.INFO)
 
 # Ensure this is outside the class definition
@@ -60,7 +59,8 @@ class OpencvFuncs():
         self.speech_config = speechsdk.SpeechConfig(subscription="702d957143704526a6687ac6cde18194", region="eastus2")
         self.speech_config.speech_synthesis_voice_name = "en-US-JennyNeural"  # Choose a voice you like
         #auto response systems
-        self.wake_word = "hi lucy"  # Wake word for activation
+        self.wake_word = "hey lance"  # Wake word for activation
+        self.wake_aliases = ("hey lance", "hi lucy", "hello lance", "hey lucy")
         self.command_log_file = 'log_commands.txt'
 
         self.listening = False  # Flag for wake word detection status
@@ -132,6 +132,7 @@ class OpencvFuncs():
         self.lidar_distance_right = 0
         self.last_announcement_time = 0.0
         self.announcement_cooldown = 15  # Cooldown of 10 seconds between announcements
+        self.battery_level = None  # Last battery % reported by the base controller
         self.speaking = False  # Flag to check if robot is already speaking
 
         # face detection & tracking
@@ -973,8 +974,8 @@ class OpencvFuncs():
                     # Check for wake word
                     speech_text = self.recognizer.recognize_google(audio).lower()
                     logging.info(f"Detected: '{speech_text}'")
-                    if self.wake_word in speech_text:
-                        logging.info(f"Wake word '{self.wake_word}' detected.")
+                    if any(w in speech_text for w in self.wake_aliases):
+                        logging.info(f"Wake word detected in '{speech_text}'.")
                         self.initiate_interaction()
                 except sr.UnknownValueError:
                     logging.warning("Could not understand the audio")
@@ -988,7 +989,7 @@ class OpencvFuncs():
         logging.info("Starting interaction sequence.")
         # Toggle lights on and greet the user
         self.toggle_lights(True)
-        self.speak("Hi, how can I be of service?")
+        self.speak_minion("Bello boss! I'm Lance. What can I do for you?")
         
         # Listen for a follow-up question or command
         self.listen_for_question()
@@ -1051,6 +1052,7 @@ class OpencvFuncs():
             # Example: Check for specific JSON fields and act on them
             if "battery_level" in data:
                 battery_level = data["battery_level"]
+                self.battery_level = battery_level
                 logging.info(f"Battery level: {battery_level}%")
                 if battery_level < 20:
                     self.warn_low_battery()
@@ -1211,48 +1213,61 @@ class OpencvFuncs():
         finally:
             # Allow the robot to move again after interaction
             self.robot_moving = True
-            self.speaking = False
-    
-    def query_copilot(self, question):
-        try:
-            # Assuming openai.api_key is already set
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",  # or another compatible model, adjust as needed
-                messages=[{"role": "user", "content": question}]
-            )
-            
-            # Extract the assistant's reply
-            answer = response['choices'][0]['message']['content'].strip()
-            logging.info(f"Response from Copilot: {answer}")
-            return answer
-        
-        except Exception as e:
-            logging.info(f"Error querying Copilot: {e}")
-            return "Sorry, I couldn't process that request."
-    
-    # Existing listen_for_question method
+            self.speaking = False    # Existing listen_for_question method
     def listen_for_question(self):
         with self.microphone as source:
-            synthesizer = speechsdk.SpeechSynthesizer(speech_config=self.speech_config)
-            synthesizer.speak_text_async("Listening.").get()
-            
+            self.speak_minion("Listening boss.")
             audio = self.recognizer.listen(source, timeout=5)
             try:
                 question = self.recognizer.recognize_google(audio).lower()
                 print(f"Recognized question: {question}")
-                
-                # Check for specific control commands
-                if "start auto drive" in question:
-                    self.execute_command("start_auto_drive")
-                elif "stop auto drive" in question:
-                    self.execute_command("stop_auto_drive")
-                else:
-                    # If not a direct command, send to query processing
-                    response = self.query_copilot(question)
-                    synthesizer.speak_text_async(response).get()
-            
+                response = self.lance_handle(question)
+                self.speak_minion(response)
             except sr.UnknownValueError:
-                synthesizer.speak_text_async("Sorry, I didn't catch that.").get()
+                self.speak_minion("Sorry, I didn't catch that boss.")
+            except Exception as e:
+                logging.error(f"Error in listen_for_question: {e}")
+                self.speak_minion("Oops boss, something went wrong.")
+
+    MINION_PHRASES = ["Bello!", "Papoy!", "Bee-do-bee-do-bee-do!", "Ta-ta!", "Banana!", "Underwear!"]
+
+    def speak_minion(self, text):
+        """Speak `text` in a high-pitched fast 'minion' voice (Azure SSML), falling
+        back to the local pyttsx3 engine if synthesis fails."""
+        if self.speaking:
+            print("Audio already playing; skipping speech.")
+            return
+        self.speaking = True
+        try:
+            phrase = random.choice(self.MINION_PHRASES)
+            ssml = (
+                '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">'
+                f'<voice name="en-US-JennyNeural"><prosody pitch="+40%" rate="+28%">'
+                f"{phrase} {text}"
+                '</prosody></voice></speak>'
+            )
+            try:
+                synthesizer = speechsdk.SpeechSynthesizer(speech_config=self.speech_config)
+                result = synthesizer.speak_ssml_async(ssml).get()
+                if result.reason != speechsdk.ResultReason.SynthesizingAudioCompleted:
+                    logging.warning(f"Azure TTS failed ({result.reason}); falling back to pyttsx3")
+                    self.speaking = False
+                    self.play_speech(text)
+            except Exception as e:
+                logging.warning(f"Azure TTS error: {e}; falling back to pyttsx3")
+                self.speaking = False
+                self.play_speech(text)
+        finally:
+            self.speaking = False
+
+    def lance_handle(self, question):
+        """Route a spoken request through the local Lance brain (Ollama)."""
+        try:
+            import lance
+            return lance.handle(question, self)
+        except Exception as e:
+            logging.error(f"lance_handle failed: {e}")
+            return "Sorry boss, my brain is having a moment."
     
     def execute_command(self, command):
         logging.info(f"Executing command: {command}")
@@ -1263,7 +1278,7 @@ class OpencvFuncs():
             self.cv_auto_drive_active = True  # Flag to track auto-drive status
             
             # Optionally, provide feedback to the user
-            self.speak_text("Auto-drive has started.")
+            self.speak_minion("Auto-drive started boss!")
             
         elif command == "stop_auto_drive":
             logging.info("Stopping auto drive...")
@@ -1272,7 +1287,7 @@ class OpencvFuncs():
             self.set_cv_mode(f['code']['cv_none'])  # Reset mode to default
             
             # Provide feedback to the user
-            self.speak_text("Auto-drive has stopped.")
+            self.speak_minion("Auto-drive stopped.")
 
     # Start the wake word detection in a separate thread
     def start_listening(self):
@@ -1485,6 +1500,10 @@ class OpencvFuncs():
     def opencv_threading(self, input_img):
         cv_thread = threading.Thread(target=self.cv_process, args=(input_img,), daemon=True)
         cv_thread.start()
+
+    def toggle_lights(self, on):
+        """Head lights on/off (used by the voice interaction path)."""
+        self.head_light_ctrl(2 if on else 0)
 
     def head_light_ctrl(self, input_mode):
         self.cv_light_mode = input_mode

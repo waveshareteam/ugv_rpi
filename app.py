@@ -325,6 +325,12 @@ cvf = cv_ctrl.OpencvFuncs(thisPath, base)
 
 # LIDAR avoider (starts later in __main__ if use_lidar is true)
 avoider = LidarAvoider(base)
+cvf.avoider = avoider  # hand Lance (voice brain) a handle to pause/resume avoidance
+
+try:
+    cvf.toggle_listening()  # auto-start Lance's wake-word voice loop at boot
+except Exception as _e:
+    logging.warning("voice listening auto-start failed: %s", _e)
 
 # Motor clamp for externally submitted drive commands (T:1 / T:13).
 MAX_DRIVE_SPEED = float(f['args_config']['max_speed'])
