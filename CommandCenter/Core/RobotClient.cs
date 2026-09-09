@@ -176,10 +176,16 @@ public sealed class RobotClient : IAsyncDisposable
     // ────────────────────────── drive commands ──────────────────────────
     void SendJson(object payload) => Json.Emit("json", payload);
 
-    /// <summary>Drive with per-wheel values in the web-app convention (-max..max). L=left track speed, R=right.</summary>
+    double _lastL = double.NaN, _lastR = double.NaN;
+
+    /// <summary>Drive with per-wheel values in the web-app convention (-max..max). L=left track speed, R=right.
+    /// Identical consecutive frames are suppressed so hold-loops don't flood the WiFi link.</summary>
     public void Drive(double l, double r)
     {
-        SendJson(new { T = State.CmdMotion, L = Math.Round(l, 3), R = Math.Round(r, 3) });
+        l = Math.Round(l, 3); r = Math.Round(r, 3);
+        if (l == _lastL && r == _lastR) { CommandSent?.Invoke(l, r); return; }
+        _lastL = l; _lastR = r;
+        SendJson(new { T = State.CmdMotion, L = l, R = r });
         WasDriving = Math.Abs(l) > 0.001 || Math.Abs(r) > 0.001;
         CommandSent?.Invoke(l, r);
     }
@@ -188,7 +194,11 @@ public sealed class RobotClient : IAsyncDisposable
     public void Gimbal(double dx, double dy) => SendJson(new { T = State.CmdGimbal, X = Math.Round(dx / 2.5, 2), Y = Math.Round(-dy / 2.5, 2), SPD = 0, ACC = 128 });
 
     public void Stop() => Drive(0, 0);
-    public void LightsToggle() => Ctrl.Emit("message", System.Text.Json.JsonSerializer.Serialize(new { A = State.CmdLightsHead }));
+    public void LightsToggle() => _ = Task.Run(async () =>
+    {
+        try { await PostFormAsync("/toggle_lights", new Dictionary<string, string>()); State.LightsOn = !State.LightsOn; }
+        catch { }
+    });
     public void CvMode(int code) => Ctrl.Emit("message", System.Text.Json.JsonSerializer.Serialize(new { A = code }));
 
     // ────────────────────────── polling loops ──────────────────────────

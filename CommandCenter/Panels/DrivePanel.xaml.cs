@@ -116,10 +116,9 @@ public partial class DrivePanel : UserControl
     void OnSpeedChanged(object sender, RoutedEventArgs e) { }
 
     // ── buttons ──
-    async void OnLights(object sender, RoutedEventArgs e)
+    void OnLights(object sender, RoutedEventArgs e)
     {
-        _robot.LightsToggle();
-        _robot.State.LightsOn = !_robot.State.LightsOn;
+        _robot.LightsToggle();          // REST /toggle_lights; state flips on success
         LightsBtn.Content = _robot.State.LightsText;
     }
 

@@ -414,6 +414,8 @@ _camera_ready = False       # set True on first successful real frame
 # this cap the process hits 'Too many open files' within about an hour.
 MAX_CAMERA_PROBE_FAILURES = 30
 _camera_retry_evt = threading.Event()
+_camera_select_idx = None   # requested camera index from /select_camera (Command Center)
+_camera_active_idx = None   # index of the USB camera currently in use
 
 
 def _make_placeholder_frame(text="Camera warming up\xe2\x80\xa6"):
@@ -435,19 +437,26 @@ def _make_placeholder_frame(text="Camera warming up\xe2\x80\xa6"):
 _placeholder = _make_placeholder_frame()
 
 
-def _probe_usb_camera():
+def _probe_usb_camera(preferred=None):
     """
     Reliably detect a USB/V4L camera by probing /dev/video* directly with
     cv2.VideoCapture, rather than relying on lsusb string matching (which
     misses many webcams that enumerate as 'Video', 'Imaging', 'USB2.0', etc).
 
-    Returns (True, capture_object) or (False, None).
+    When `preferred` is given, that /dev/videoN is probed first (used by
+    /select_camera). Returns (True, capture_object) or (False, None).
     """
+    global _camera_active_idx
     import glob as _glob
     import cv2 as _cv2
 
-    # Try indices 0-3 covering /dev/video0 .. /dev/video3
-    for idx in range(4):
+    # Try indices 0-3 covering /dev/video0 .. /dev/video3,
+    # with the preferred index first when a switch was requested.
+    indices = list(range(4))
+    if preferred is not None and preferred in indices:
+        indices.remove(preferred)
+        indices.insert(0, preferred)
+    for idx in indices:
         try:
             cap = _cv2.VideoCapture(idx, _cv2.CAP_V4L2)
             if cap is not None and cap.isOpened():
@@ -463,6 +472,7 @@ def _probe_usb_camera():
                     # Shrink internal buffer so frames are always fresh
                     cap.set(_cv2.CAP_PROP_BUFFERSIZE, 1)
                     print(f"[video] USB camera found at /dev/video{idx}")
+                    _camera_active_idx = idx
                     return True, cap
             if cap:
                 cap.release()
@@ -486,7 +496,7 @@ def _camera_capture_loop():
        in later can be picked up via POST /retry_camera.
     5. On read failure, release and re-probe instead of looping on errors.
     """
-    global _latest_frame, _camera_ready
+    global _latest_frame, _camera_ready, _camera_select_idx, _camera_active_idx
     import cv2 as _cv2
     import numpy as _np
 
@@ -525,7 +535,31 @@ def _camera_capture_loop():
         camera      = None
         use_csi     = False
         reused_csi  = False
-        if getattr(cvf, 'picam2', None) is not None and not getattr(cvf, 'usb_camera_connected', False):
+        # cv_ctrl opens /dev/video0 AT IMPORT and keeps it forever — the #1
+        # reason our own probe then reports 'Device or resource busy'.
+        # Reuse it whenever it actually delivers frames.
+        if getattr(cvf, 'usb_camera_connected', False) and getattr(cvf, 'camera', None) is not None:
+            try:
+                test = cvf.camera.read()
+                if test is not None and test[0] and test[1] is not None:
+                    camera  = cvf.camera
+                    use_csi = False
+                    reused_csi = True
+                    import os as _os, re as _re, glob as _glob2
+                    _camera_active_idx = None
+                    for _fd in _glob2.glob('/proc/self/fd/*'):
+                        try:
+                            _t = _os.readlink(_fd)
+                            _m = _re.fullmatch(r'/dev/video(\d+)', _t)
+                            if _m:
+                                _camera_active_idx = int(_m.group(1))
+                                break
+                        except OSError:
+                            continue
+                    print(f"[video] Using USB camera already opened by cv_ctrl (video{_camera_active_idx})")
+            except Exception:
+                reused_csi = False
+        if camera is None and getattr(cvf, 'picam2', None) is not None and not getattr(cvf, 'usb_camera_connected', False):
             try:
                 test = cvf.picam2.capture_array()
                 if test is not None:
@@ -542,9 +576,10 @@ def _camera_capture_loop():
                     pass
                 cvf.picam2 = None
 
-        # ── 2. Probe for USB camera ─────────────────────────────────
+        # ── 2. Probe for USB camera (preferred index first when switching) ──
         if camera is None:
-            usb_found, camera = _probe_usb_camera()
+            usb_found, camera = _probe_usb_camera(preferred=_camera_select_idx)
+            _camera_select_idx = None          # switch request handled for this pass
             if usb_found:
                 use_csi = False
                 print("[video] Using USB camera")
@@ -598,6 +633,16 @@ def _camera_capture_loop():
         consecutive_errors = 0
         while True:
             try:
+                # Camera switch requested (Command Center): release and re-probe.
+                if _camera_select_idx is not None:
+                    print(f"[video] switching to /dev/video{_camera_select_idx}")
+                    try:
+                        (camera.stop() if use_csi else camera.release())
+                    except Exception:
+                        pass
+                    _camera_active_idx = None
+                    camera = None
+                    break
                 # Route everything through cvf.frame_process() so CV modes,
                 # OSD, info overlays, FPS counter, etc. all work normally.
                 frame = cvf.frame_process()
@@ -978,6 +1023,78 @@ def retry_camera():
     _camera_retry_evt.set()
     return jsonify({'status': 'success',
                     'message': 'Camera detection restarted - check /camera_status'})
+
+
+@app.route('/camera_list')
+def camera_list():
+    """List V4L2 video devices with human-readable names (for the Command Center)."""
+    import glob as _glob
+    import os as _os
+    import re as _re
+    import subprocess as _sp
+
+    # Which /dev/videoN does THIS process actually hold open? (cv_ctrl opens the
+    # camera at import, bypassing _probe_usb_camera, so derive it from our fds.)
+    active_idx = _camera_active_idx
+    if active_idx is None:
+        for fd in _glob.glob('/proc/self/fd/*'):
+            try:
+                target = _os.readlink(fd)
+                m = _re.fullmatch(r'/dev/video(\d+)', target)
+                if m:
+                    active_idx = int(m.group(1))
+                    break
+            except OSError:
+                continue
+
+    cams = []
+    seen = set()
+    for dev in sorted(_glob.glob('/dev/video*'),
+                      key=lambda p: int(_re.findall(r'\d+', p)[0] or 0)):
+        idx = int(_re.findall(r'\d+', dev)[0])
+        if idx in seen or idx > 9:
+            continue
+        seen.add(idx)
+        name = dev
+        try:
+            out = _sp.run(['v4l2-ctl', '-d', dev, '--info'],
+                          capture_output=True, text=True, timeout=2)
+            m = _re.search(r'Card type\s*:\s*(.+)', out.stdout)
+            if m:
+                name = m.group(1).strip()
+        except Exception:
+            pass
+        cams.append({'index': idx, 'name': name,
+                     'in_use': idx == active_idx})
+    return jsonify({'cameras': cams, 'active': active_idx})
+
+
+@app.route('/select_camera', methods=['POST'])
+def select_camera():
+    """Switch the live stream to a different /dev/videoN (Command Center)."""
+    global _camera_select_idx
+    try:
+        idx = int(request.form.get('index', -1))
+    except (TypeError, ValueError):
+        return jsonify({'status': 'error', 'message': 'bad index'}), 400
+    if idx < 0 or idx > 9:
+        return jsonify({'status': 'error', 'message': 'index out of range'}), 400
+    _camera_select_idx = idx
+    _camera_retry_evt.set()      # wake the guard mode if probing had given up
+    return jsonify({'status': 'success',
+                    'message': f'Switching to /dev/video{idx}'})
+
+
+@app.route('/video_feed2')
+def video_feed2():
+    """Second MJPEG stream (same frames) so two viewers can attach at once."""
+    resp = Response(
+        generate_frames(),
+        mimetype='multipart/x-mixed-replace; boundary=frame'
+    )
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['X-Accel-Buffering'] = 'no'
+    return resp
 
 @app.route('/send_command', methods=['POST'])
 def handle_command():
