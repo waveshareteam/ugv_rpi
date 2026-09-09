@@ -1231,6 +1231,33 @@ class OpencvFuncs():
 
     MINION_PHRASES = ["Bello!", "Papoy!", "Bee-do-bee-do-bee-do!", "Ta-ta!", "Banana!", "Underwear!"]
 
+    def _synth_rest(self, ssml):
+        """Synthesize SSML via the Azure TTS REST endpoint (robust: the Speech SDK's
+        WebSocket layer fails to open on this box after a reboot, while plain HTTPS
+        works). Returns the WAV bytes."""
+        import urllib.request
+        url = f"https://{self.speech_config.region}.tts.speech.microsoft.com/cognitiveservices/v1"
+        req = urllib.request.Request(url, data=ssml.encode("utf-8"), method="POST")
+        req.add_header("Ocp-Apim-Subscription-Key", self.speech_config.subscription_key)
+        req.add_header("Content-Type", "application/ssml+xml")
+        req.add_header("X-Microsoft-OutputFormat", "riff-24khz-16bit-mono-pcm")
+        with urllib.request.urlopen(req, timeout=25) as r:
+            return r.read()
+
+    def _play_wav(self, wav_bytes):
+        """Play WAV bytes through the system default sink (currently the BT speaker)."""
+        import subprocess, tempfile, os
+        fd, path = tempfile.mkstemp(suffix=".wav", dir="/tmp")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(wav_bytes)
+            subprocess.run(["/usr/bin/paplay", path], timeout=40, check=False)
+        finally:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
     def speak_minion(self, text):
         """Speak `text` in a high-pitched fast 'minion' voice (Azure SSML), falling
         back to the local pyttsx3 engine if synthesis fails."""
@@ -1246,17 +1273,26 @@ class OpencvFuncs():
                 f"{phrase} {text}"
                 '</prosody></voice></speak>'
             )
+            # Primary: REST synthesis -> paplay (reliable; SDK WebSocket is broken on this box)
+            try:
+                wav = self._synth_rest(ssml)
+                if wav and wav[:4] == b"RIFF":
+                    self._play_wav(wav)
+                    return
+                logging.warning("REST TTS returned no audio; trying SDK")
+            except Exception as e:
+                logging.warning(f"REST TTS error: {e}; trying SDK")
+            # Fallback 1: Azure Speech SDK (plays to the default device itself)
             try:
                 synthesizer = speechsdk.SpeechSynthesizer(speech_config=self.speech_config)
                 result = synthesizer.speak_ssml_async(ssml).get()
-                if result.reason != speechsdk.ResultReason.SynthesizingAudioCompleted:
-                    logging.warning(f"Azure TTS failed ({result.reason}); falling back to pyttsx3")
-                    self.speaking = False
-                    self.play_speech(text)
+                if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+                    return
+                logging.warning(f"Azure SDK TTS failed ({result.reason}); falling back to pyttsx3")
             except Exception as e:
-                logging.warning(f"Azure TTS error: {e}; falling back to pyttsx3")
-                self.speaking = False
-                self.play_speech(text)
+                logging.warning(f"Azure SDK TTS error: {e}; falling back to pyttsx3")
+            # Fallback 2: local pyttsx3 engine
+            self.play_speech(text)
         finally:
             self.speaking = False
 
