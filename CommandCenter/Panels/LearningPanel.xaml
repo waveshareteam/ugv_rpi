@@ -1,0 +1,75 @@
+<UserControl x:Class="CommandCenter.Panels.LearningPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- teach & replay -->
+        <Border Style="{StaticResource PanelCard}" Grid.Column="0">
+            <StackPanel>
+                <TextBlock Text="① TEACH A PATH" Style="{StaticResource SectionTitle}"/>
+                <TextBlock Style="{StaticResource HudText}" TextWrapping="Wrap"
+                           Text="Drive the robot with WASD/D-pad on the Drive tab; every command is recorded below. Stop recording, refine, save, replay with obstacle aborts."/>
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <Button x:Name="RecBtn" Content="⏺ Start Recording" Style="{StaticResource OpButton}" Click="OnRecord"/>
+                    <Button x:Name="SaveBtn" Content="💾 Refine+Save" Style="{StaticResource OpButton}" Click="OnSave"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <ComboBox x:Name="PathBox" Width="170" Background="#FF1B1E23"/>
+                    <Button Content="▶ Replay" Style="{StaticResource OpButton}" Click="OnReplay"/>
+                    <Button Content="⏹ Stop" Style="{StaticResource OpButton}" Click="OnStopAuto"/>
+                </StackPanel>
+                <TextBlock x:Name="RecInfo" Style="{StaticResource HudText}" Text="not recording" Margin="0,8,0,0"/>
+                <ListBox x:Name="StepList" Height="150" Margin="0,8,0,0" Background="#FF1B1E23" FontFamily="Consolas" FontSize="11"/>
+            </StackPanel>
+        </Border>
+
+        <!-- autopilot -->
+        <Border Style="{StaticResource PanelCard}" Grid.Column="1">
+            <StackPanel>
+                <TextBlock Text="② SELF-DRIVING" Style="{StaticResource SectionTitle}"/>
+                <TextBlock Style="{StaticResource HudText}" TextWrapping="Wrap"
+                           Text="Reactive corridor following: scores 13 candidate headings against live lidar + the learned obstacle memory, prefers the goal heading, slows near obstacles."/>
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <Button x:Name="GoBtn" Content="🧠 Engage" Style="{StaticResource OpButton}" Click="OnReactive"/>
+                    <Button Content="⏹ Stop" Style="{StaticResource OpButton}" Click="OnStopAuto"/>
+                </StackPanel>
+                <TextBlock Style="{StaticResource HudText}" Text="Goal heading (°)" Margin="0,10,0,2"/>
+                <Slider x:Name="GoalSlider" Minimum="-90" Maximum="90" Value="0" TickFrequency="15" IsSnapToTickEnabled="True"/>
+                <TextBlock Style="{StaticResource HudText}" Text="Cruise speed" Margin="0,6,0,2"/>
+                <Slider x:Name="CruiseSlider" Minimum="0.15" Maximum="0.6" Value="0.35"/>
+                <TextBlock Style="{StaticResource HudText}" Text="Danger distance (m)" Margin="0,6,0,2"/>
+                <Slider x:Name="DangerSlider" Minimum="0.3" Maximum="1.2" Value="0.55"/>
+                <TextBlock x:Name="DecisionText" Style="{StaticResource HudValue}" TextWrapping="Wrap" Text="—" Margin="0,10,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- learned memory -->
+        <Border Style="{StaticResource PanelCard}" Grid.Column="2">
+            <StackPanel>
+                <TextBlock Text="③ LEARNED OBSTACLE MAP" Style="{StaticResource SectionTitle}"/>
+                <Border Background="#FF0D0F12" CornerRadius="6" ClipToBounds="True" Height="240">
+                    <Canvas x:Name="MemCanvas"/>
+                </Border>
+                <TextBlock x:Name="MemInfo" Style="{StaticResource HudText}" Text="0 cells learned" Margin="0,8,0,0"/>
+                <TextBlock Text="④ FOLLOW OBJECT (CV)" Style="{StaticResource SectionTitle}" Margin="0,12,0,0"/>
+                <TextBlock Style="{StaticResource HudText}" Text="Target hue (0=red, 60=yellow, 120=green, 240=blue)"/>
+                <Slider x:Name="HueSlider" Minimum="0" Maximum="360" Value="0"/>
+                <Rectangle x:Name="HuePreview" Height="14" RadiusX="3" RadiusY="3" Margin="0,4,0,8">
+                    <Rectangle.Fill><SolidColorBrush Color="Red"/></Rectangle.Fill>
+                </Rectangle>
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="FollowBtn" Content="🎯 Engage" Style="{StaticResource OpButton}" Click="OnFollow"/>
+                    <Button Content="⏹ Stop" Style="{StaticResource OpButton}" Click="OnStopAuto"/>
+                </StackPanel>
+                <TextBlock x:Name="TrackerInfo" Style="{StaticResource HudText}" Text="tracker idle"/>
+                <TextBlock Style="{StaticResource HudText}" TextWrapping="Wrap" Margin="0,6,0,0"
+                           Text="Point the camera at a strongly-colored object, match the hue slider, then engage: the robot steers toward the largest color blob and keeps its distance."/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>
