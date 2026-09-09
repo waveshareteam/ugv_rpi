@@ -14,8 +14,8 @@ H=ws@172.30.136.241
 for i in $(seq 1 40); do
   if ping -n 1 -w 1500 172.30.136.241 > /dev/null 2>&1; then
     echo "link up (poll $i) - deploying immediately"
-    tar czf - -C . app.py -C templates index.html conn.js | \
-    ssh -o ConnectTimeout=25 -o ServerAliveInterval=5 $H "cd ~/ugv_rpi && cp app.py backup_20260908/app.py.pass4 && cp templates/index.html backup_20260908/index.html.pass4 && tar xzf - && kill -9 \$(pgrep -f 'ugv-env/bin/python /home/ws/ugv_rpi/app.py') 2>/dev/null; echo TAR_DEPLOY_OK" && { echo "DEPLOY COMPLETE"; break; }
+    tar czf - app.py templates/index.html templates/conn.js | \
+    ssh -o ConnectTimeout=25 -o ServerAliveInterval=5 $H "cd ~/ugv_rpi && cp app.py backup_20260908/app.py.pass4 && cp templates/index.html backup_20260908/index.html.pass4 && tar xzf - && kill -9 \$(pgrep -f 'ugv_rpi/ap[p].py') 2>/dev/null; echo TAR_DEPLOY_OK" && { echo "DEPLOY COMPLETE - app relaunches via cron/autorun"; break; }
   fi
   sleep 5
 done
