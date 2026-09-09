@@ -363,6 +363,15 @@ class BaseController:
 
 
 	def base_json_ctrl(self, input_json):
+		# Motor wiring on this unit is inverted on both channels: the ESP32
+		# drives the wheels backward for positive L/R (and turns mirror).
+		# Mirror the motion space here, at the single choke point every drive
+		# source passes through (web UI, Command Center, avoider, auto-drive),
+		# so +L/+R means forward and left/right follow the UI convention.
+		if input_json.get('T') in (1, 13) and 'L' in input_json and 'R' in input_json:
+			input_json = dict(input_json)
+			input_json['L'] = -input_json['L']
+			input_json['R'] = -input_json['R']
 		self.send_command(input_json)
 
 

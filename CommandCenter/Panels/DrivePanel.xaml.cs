@@ -79,8 +79,9 @@ public partial class DrivePanel : UserControl
         if (fwd == 0 && turn == 0 && spin == 0) { if (_robot.WasDriving) _robot.Stop(); return; }
         if (spin != 0) { _robot.Drive(spin * max, -spin * max); return; }
         double l = fwd * max, r = fwd * max;
-        if (turn > 0) { l = fwd * max * 0.6; r = fwd * max; }
-        if (turn < 0) { l = fwd * max; r = fwd * max * 0.6; }
+        // D = turn right -> slow the right wheel; A = turn left -> slow the left.
+        if (turn > 0) { l = fwd * max; r = fwd * max * 0.6; }
+        if (turn < 0) { l = fwd * max * 0.6; r = fwd * max; }
         _robot.Drive(l, r);
         // arrow keys nudge the gimbal while driving
         if (_keys.Contains(Key.Left)) _robot.Gimbal(-12, 0);
