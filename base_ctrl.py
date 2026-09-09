@@ -56,6 +56,14 @@ class ReadLine:
 		# Rolling read buffer + bookkeeping for the non-blocking scanner.
 		self._lbuf = bytearray()
 		self._last_rx = 0.0
+		# Wire-health counters: bytes arriving vs valid frames parsed.  Rates
+		# are computed over a 2 s sliding window; the UI uses them to tell
+		# "sensor silent" from "wire alive but garbage" from "streaming".
+		self._rate_stamp = time.time()
+		self._rate_bytes = 0
+		self._rate_frames = 0
+		self.rx_bps = 0.0
+		self.frames_per_s = 0.0
 
 	def readline(self):
 		i = self.buf.find(b"\n")
@@ -137,9 +145,20 @@ class ReadLine:
 			return
 		try:
 			t_now = time.time()
+			# Rate window first, so a disconnected port still decays to zero
+			# (the reader loop calls this every ~10 ms regardless).
+			if t_now - self._rate_stamp >= 2.0:
+				dt = t_now - self._rate_stamp
+				self.rx_bps = self._rate_bytes / dt
+				self.frames_per_s = self._rate_frames / dt
+				self._rate_bytes = 0
+				self._rate_frames = 0
+				self._rate_stamp = t_now
 			# Pull whatever arrived recently into the rolling buffer.
 			if self.lidar_ser.in_waiting > 0:
-				self._lbuf.extend(self.lidar_ser.read(min(self.lidar_ser.in_waiting, 8192)))
+				chunk = self.lidar_ser.read(min(self.lidar_ser.in_waiting, 8192))
+				self._lbuf.extend(chunk)
+				self._rate_bytes += len(chunk)
 				if len(self._lbuf) > 65536:
 					del self._lbuf[:16384]
 				self._last_rx = t_now
@@ -160,6 +179,7 @@ class ReadLine:
 					continue
 				start_angle = self.parse_lidar_frame(list(frame))
 				self._stamp_bins(frame)
+				self._rate_frames += 1
 				consume = i + 47
 				# Wrap detected: start angle went backwards -> full revolution.
 				if self.last_start_angle > start_angle:

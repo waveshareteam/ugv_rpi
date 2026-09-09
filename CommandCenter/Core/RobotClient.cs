@@ -247,6 +247,8 @@ public sealed class RobotClient : IAsyncDisposable
                     State.AvoidActive = st.GetProperty("avoidance_active").GetBoolean();
                     State.LidarHw = st.GetProperty("hw_connected").GetBoolean();
                     State.LidarStreaming = st.GetProperty("streaming").GetBoolean();
+                    if (st.TryGetProperty("rx_bps", out var rx)) State.Rx_bps = rx.GetDouble();
+                    if (st.TryGetProperty("frames_per_s", out var fps)) State.Frames_per_s = fps.GetDouble();
                 }
                 catch { }
             }

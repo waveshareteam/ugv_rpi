@@ -78,13 +78,37 @@ public class RobotState : System.ComponentModel.INotifyPropertyChanged
         get => _lidarStreaming;
         set { _lidarStreaming = value; Raise(nameof(LidarHwText)); Raise(nameof(LidarHwBrush)); }
     }
+    double _rxBps;
+    /// <summary>Raw bytes/s arriving on the lidar serial port (2 s average).</summary>
+    public double Rx_bps
+    {
+        get => _rxBps;
+        set { if (Math.Abs(_rxBps - value) >= 1.0) { _rxBps = value; Raise(nameof(LidarHwText)); Raise(nameof(LidarHwBrush)); } }
+    }
+    double _framesPerS;
+    /// <summary>Valid STL-19P frames parsed per second (2 s average).</summary>
+    public double Frames_per_s
+    {
+        get => _framesPerS;
+        set { if (Math.Abs(_framesPerS - value) >= 0.1) { _framesPerS = value; Raise(nameof(LidarHwText)); Raise(nameof(LidarHwBrush)); } }
+    }
+    /// <summary>Three-state wire health: streaming / wire-alive-but-garbage / silent.</summary>
     public string LidarHwText =>
-        LidarStreaming ? "LIDAR: streaming" :
-        LidarHw ? "LIDAR: port open, no data (check power/cable)" :
-        "LIDAR: not connected";
-    public System.Windows.Media.Brush LidarHwBrush => LidarStreaming
-        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4F, 0xF5, 0xC0))
-        : System.Windows.Media.Brushes.Orange;
+        LidarStreaming ? $"LIDAR: streaming ({Frames_per_s:0} frames/s)" :
+        !LidarHw ? "LIDAR: not connected" :
+        Rx_bps >= 300 ? "LIDAR: wire alive, no valid frames - re-seat the 4-pin lidar cable (check Tx pin)" :
+        "LIDAR: sensor silent - no data arriving (check power/cable)";
+    public System.Windows.Media.Brush LidarHwBrush
+    {
+        get
+        {
+            if (LidarStreaming)
+                return new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4F, 0xF5, 0xC0));
+            if (LidarHw && Rx_bps >= 300)
+                return new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF5, 0xBD, 0x5F)); // amber: wire ok, data garbage
+            return System.Windows.Media.Brushes.OrangeRed; // silent or disconnected
+        }
+    }
 
     // ── cameras ──
     public System.Collections.Generic.List<CameraInfo> Cameras = new();

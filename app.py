@@ -883,6 +883,8 @@ def lidar_status():
     # the port open.  Report the age of the last full revolution instead.
     scan_age = (time.time() - getattr(base.rl, 'lidar_scan_time', 0.0)) if base.rl.lidar_scan_time > 0 else None
     streaming = scan_age is not None and scan_age < 3.0
+    # Wire health: raw bytes/s arriving on the port vs valid frames parsed.
+    # Bytes with no frames => the cable is on the wrong pin (PWM) or corrupt.
     return jsonify({
         'avoidance_active': avoider._active,
         'avoidance_state':  avoider.state,
@@ -890,6 +892,8 @@ def lidar_status():
         'hw_connected':     hw_connected,
         'streaming':        streaming,
         'scan_age_s':       scan_age if scan_age is not None else -1,
+        'rx_bps':           round(getattr(base.rl, 'rx_bps', 0.0), 1),
+        'frames_per_s':     round(getattr(base.rl, 'frames_per_s', 0.0), 1),
         # Tell the UI why things aren't working
         'status_msg': (
             'Active'               if enabled and hw_connected and avoider._active else
