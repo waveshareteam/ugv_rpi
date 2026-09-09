@@ -11,8 +11,23 @@
   clamped server-side to `0.5/-0.5` (verified in the previous pass via the deployed
   handler harness; the log line is `[drive] clamped ...` in ugv.log).
 - LIDAR radar: live polling of /lidar_points + /lidar_status with the enable/disable
-  toggle. Note: the LD19 hardware was detected but not streaming during testing —
-  check its 5V power/USB if the radar stays empty.
+  toggle.
+- Cameras (Sep 9): BOTH USB cameras verified producing frames — Microsoft LifeCam
+  Studio (video2/3, used by the app, streams real JPEG via /video_feed) and Realtek
+  "USB Camera" (video0/1, spare — captured a 614400-byte raw frame via v4l2-ctl).
+  Only one camera is used by app.py at a time (first found, here video2).
+
+## LIDAR D500 — hardware diagnosis (Sep 9, definitively not software)
+The web UI and server are correct and complete; the sensor produces no data:
+- It does NOT enumerate as its own USB serial device (no CP2102/CH340/FTDI in lsusb;
+  kernel log shows only the ESP32 base board's CDC port /dev/ttyACM0, Arduino VID).
+- /dev/ttyACM0 is exclusively the lidar port in this vendor stack (motors live on
+  /dev/ttyAMA0 GPIO UART); the app holds it open, but ZERO bytes arrive — verified
+  by freezing the app (SIGSTOP), reading raw at 115200 and 230400 baud, and sending
+  LDROBOT start-scan commands (5A 05 00 01 60) — all silent. GPIO UARTs also silent.
+=> Check the D500's 5V supply and the cable from sensor to the base board's lidar
+   UART header. The moment data flows, the radar on the page fills in by itself
+   (polling is already live); no software change is needed.
 
 ## Operational gotchas learned the hard way
 1. **WiFi flakiness is environmental.** The robot dropped off the network twice in one
