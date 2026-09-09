@@ -107,6 +107,8 @@ public partial class DrivePanel : UserControl
             "fwd_right" => (max, slow),
             "back_left" => (-slow, -max),
             "back_right" => (-max, -slow),
+            "left" => (-max, max),
+            "right" => (max, -max),
             _ => (0, 0)
         };
         _robot.Drive(v.L, v.R);

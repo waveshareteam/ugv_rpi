@@ -59,9 +59,9 @@
                         <RepeatButton Grid.Row="0" Grid.Column="1" Style="{StaticResource OpRepeatButton}" Content="▲" FontSize="20" Click="OnDirHold" MouseUp="OnDirRelease" MouseLeave="OnDirRelease" Tag="fwd"/>
                         <RepeatButton Grid.Row="0" Grid.Column="0" Style="{StaticResource OpRepeatButton}" Content="↖" Click="OnDirHold" MouseUp="OnDirRelease" MouseLeave="OnDirRelease" Tag="fwd_left"/>
                         <RepeatButton Grid.Row="0" Grid.Column="2" Style="{StaticResource OpRepeatButton}" Content="↗" Click="OnDirHold" MouseUp="OnDirRelease" MouseLeave="OnDirRelease" Tag="fwd_right"/>
-                        <RepeatButton Grid.Row="1" Grid.Column="0" Style="{StaticResource OpRepeatButton}" Content="◀" FontSize="20" Click="OnDirHold" MouseUp="OnDirRelease" MouseLeave="OnDirRelease" Tag="fwd_left"/>
+                        <RepeatButton Grid.Row="1" Grid.Column="0" Style="{StaticResource OpRepeatButton}" Content="◀" FontSize="20" Click="OnDirHold" MouseUp="OnDirRelease" MouseLeave="OnDirRelease" Tag="left"/>
                         <Button Grid.Row="1" Grid.Column="1" Content="■" FontSize="16" Style="{StaticResource OpButton}" Click="OnStop"/>
-                        <RepeatButton Grid.Row="1" Grid.Column="2" Style="{StaticResource OpRepeatButton}" Content="▶" FontSize="20" Click="OnDirHold" MouseUp="OnDirRelease" MouseLeave="OnDirRelease" Tag="fwd_right"/>
+                        <RepeatButton Grid.Row="1" Grid.Column="2" Style="{StaticResource OpRepeatButton}" Content="▶" FontSize="20" Click="OnDirHold" MouseUp="OnDirRelease" MouseLeave="OnDirRelease" Tag="right"/>
                         <RepeatButton Grid.Row="2" Grid.Column="0" Style="{StaticResource OpRepeatButton}" Content="↙" Click="OnDirHold" MouseUp="OnDirRelease" MouseLeave="OnDirRelease" Tag="back_left"/>
                         <RepeatButton Grid.Row="2" Grid.Column="1" Style="{StaticResource OpRepeatButton}" Content="▼" FontSize="20" Click="OnDirHold" MouseUp="OnDirRelease" MouseLeave="OnDirRelease" Tag="back"/>
                         <RepeatButton Grid.Row="2" Grid.Column="2" Style="{StaticResource OpRepeatButton}" Content="↘" Click="OnDirHold" MouseUp="OnDirRelease" MouseLeave="OnDirRelease" Tag="back_right"/>
