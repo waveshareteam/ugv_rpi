@@ -1501,6 +1501,12 @@ class OpencvFuncs():
         if not input_data:
             return
         try:
+            # Battery: the ESP32 broadcasts pack voltage as "v" (3S LiPo:
+            # 12.6 V full, 9.9 V empty).  Store as a 0-100 percentage.
+            v = input_data.get("v")
+            if isinstance(v, (int, float)) and v > 0:
+                pct = int((v - 9.9) / (12.6 - 9.9) * 100)
+                self.battery_level = max(0, min(100, pct))
             if self.show_base_info_flag:
                 self.recv_deque.appendleft(json.dumps(self.format_json_numbers(input_data)))
             if input_data['T'] == 1003:

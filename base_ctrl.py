@@ -328,22 +328,32 @@ class BaseController:
 		
 
 	def feedback_data(self):
+		"""Read the latest complete ESP32 telemetry frame.
+
+		The ESP32 emits ~19.5 Hz of \r\n-framed JSON like
+		{"T":1001,"L":0,...,"v":11.84,"odl":..,"odr":..} and may echo
+		drive commands back on the same wire, so lines that are empty,
+		unparseable, or not a T:1001 frame are skipped (logged at debug,
+		never raised).  Returns the freshest frame seen, or the last known
+		one when the sensor is idle.  Never blocks (only reads when the
+		kernel reports bytes waiting).
+		"""
+		latest = None
 		try:
 			while self.rl.s.in_waiting > 0:
-				self.data_buffer = json.loads(self.rl.readline().decode('utf-8'))
-				if 'T' in self.data_buffer:
-					self.base_data = self.data_buffer
-					self.data_buffer = None
-					if self.base_data["T"] == 1003:
-						print(self.base_data)
-						return self.base_data
-			self.rl.clear_buffer()
-			self.data_buffer = json.loads(self.rl.readline().decode('utf-8'))
-			self.base_data = self.data_buffer
-			return self.base_data
+				line = self.rl.readline().strip()
+				if not line or not line.startswith(b"{"):
+					continue
+				try:
+					d = json.loads(line.decode('utf-8'))
+				except Exception:
+					continue
+				if isinstance(d, dict) and d.get('T') == 1001:
+					self.base_data = d
+					latest = d
 		except Exception as e:
-			self.rl.clear_buffer()
 			print(f"[base_ctrl.feedback_data] error: {e}")
+		return latest if latest is not None else self.base_data
 
 
 	def on_data_received(self):
