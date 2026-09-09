@@ -3,34 +3,91 @@ import imutils
 import mediapipe as mp
 import imageio
 import threading
-import datetime, time
 import numpy as np
 import math
-import yaml, os, json, subprocess
+import time
+import openai  # Import OpenAI if using their API
+import yaml
+import serial
+import torch
+import os
+import json
+import subprocess
+import datetime
+import pygame
+from gtts import gTTS
+import speech_recognition as sr  # Import the speech recognition library
+from threading import Thread
 from collections import deque
+import azure.cognitiveservices.speech as speechsdk
 import textwrap
-
-# libraries for csi camera
+import logging
+from sklearn.linear_model import LinearRegression
+import pyttsx3
+from datetime import datetime  # Ensure this is imported correctly
+# Libraries for CSI camera
 from picamera2 import Picamera2
 from picamera2.encoders import H264Encoder, Encoder
 from picamera2.outputs import FfmpegOutput
+import sys
 
-# config file.
 curpath = os.path.realpath(__file__)
 thisPath = os.path.dirname(curpath)
 with open(thisPath + '/config.yaml', 'r') as yaml_file:
     f = yaml.safe_load(yaml_file)
+    
+# Configure logging
+logging.basicConfig(filename='Log.txt', 
+                    level=logging.INFO, 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
+logging.basicConfig(filename='log_commands.txt', level=logging.INFO, format='%(asctime)s - %(message)s')
+
+# Initialize the OpenAI API with your API key
+openai.api_key = "sk-proj-REDACTED"
+logging.basicConfig(level=logging.INFO)
+
+# Ensure this is outside the class definition
+if __name__ == "__main__":
+    # Instantiate the OpencvFuncs class and start listening for wake word
+    opencv_funcs = OpencvFuncs(project_path="/home/ws/ugv_rpi", base_ctrl="base_controller")
+    opencv_funcs.start_listening()
 
 class OpencvFuncs():
     """docstring for OpencvFuncs"""
-    def __init__(self, project_path, base_ctrl):
+    def __init__(self, project_path, base_ctrl, lidar_port="/dev/ttyAMA0", baud_rate=115200, max_distance=0.5):
+        # Any other initializations
+        self.speech_config = speechsdk.SpeechConfig(subscription="702d957143704526a6687ac6cde18194", region="eastus2")
+        self.speech_config.speech_synthesis_voice_name = "en-US-JennyNeural"  # Choose a voice you like
+        #auto response systems
+        self.wake_word = "hi lucy"  # Wake word for activation
+        self.command_log_file = 'log_commands.txt'
+
+        self.listening = False  # Flag for wake word detection status
+        # Initialize a lock for the microphone
+        self.mic_lock = threading.Lock()
+        # Add initialization for listening and toggle-related attributes
+        self.listening_active = False  # Tracks if listening mode is active
+        self.listening_thread = None   # Store the listening thread
+        self.speech_lock = threading.Lock()  # Prevents overlapping accesses to the microphone
+        self.project_path = project_path
         self.base_ctrl = base_ctrl
+        self.prev_error = 0
+        self.integral_error = 0
+        self.line_memory = deque(maxlen=100)  # Store recent line positions and features
+        self.model = LinearRegression()  # Linear model to predict line position adjustments
+
+        # Gesture and person detection initializations
+        self.gesture_enabled = True
+        self.person_detected = False
+        self.robot_moving = True
+        self.speaking = False
+
         self.cv_event = threading.Event()
         self.cv_event.clear()
         self.cv_mode = f['code']['cv_none']
         self.detection_reaction_mode = f['code']['re_none']
-        
+
         self.this_path = project_path
         self.photo_path = self.this_path + '/templates/pictures/'
         self.video_path = self.this_path + '/templates/videos/'
@@ -50,7 +107,7 @@ class OpencvFuncs():
         self.video_fps = 0
         self.fps_start_time = time.time()
         self.fps_count = 0
-        self.cv_movtion_lock = True
+        self.cv_movtion_lock = False  # Corrected default value
         self.aimed_error = f['cv']['aimed_error']
         self.track_spd_rate = f['cv']['track_spd_rate']
         self.track_acc_rate = f['cv']['track_acc_rate']
@@ -58,24 +115,37 @@ class OpencvFuncs():
         self.sampling_rad = f['cv']['sampling_rad']
 
         # reaction
-        self.last_frame_capture_time = datetime.datetime.now()
-        self.last_movtion_captured = datetime.datetime.now()
+        self.last_frame_capture_time = datetime.now()  # Correct usage
+        self.last_movtion_captured = datetime.now()  # Correct usage
 
         # movtion detection
         self.avg = None
+        self.cv_motion_lock = False  # Initialize cv_motion_lock
+        self.integral = 0.0
+        self.lidar_distance = float('inf')
+        self.tts_engine = pyttsx3.init()
+        self.tts_engine.setProperty('volume', 10.0)  # Set volume to maximum (1.0 is the max)
+        self.recognizer = sr.Recognizer()
+        self.microphone = sr.Microphone()
+        self.detected_people = 0
+        self.lidar_distance_left = 0
+        self.lidar_distance_right = 0
+        self.last_announcement_time = 0.0
+        self.announcement_cooldown = 15  # Cooldown of 10 seconds between announcements
+        self.speaking = False  # Flag to check if robot is already speaking
 
         # face detection & tracking
-        self.faceCascade = cv2.CascadeClassifier(thisPath + '/models/haarcascade_frontalface_default.xml')
+        self.faceCascade = cv2.CascadeClassifier(self.this_path + '/models/haarcascade_frontalface_default.xml')
         self.min_radius = f['cv']['min_radius']
         self.track_faces_iterate = f['cv']['track_faces_iterate']
 
         # color detection
         self.points = deque(maxlen=32)
         self.color_list = {
-                        'red':  [np.array([  0,200, 170]), np.array([ 10, 255, 255])],
-                        'green':[np.array([ 50, 130, 130]), np.array([ 78, 255, 255])],
-                        'blue': [np.array([ 90,160, 150]), np.array([105, 255, 255])]
-                        }
+            'red': [np.array([0, 200, 170]), np.array([10, 255, 255])],
+            'green': [np.array([50, 130, 130]), np.array([78, 255, 255])],
+            'blue': [np.array([90, 160, 150]), np.array([105, 255, 255])]
+        }
         if f['cv']['default_color'] in self.color_list:
             self.color_lower = self.color_list[f['cv']['default_color']][0]
             self.color_upper = self.color_list[f['cv']['default_color']][1]
@@ -84,8 +154,13 @@ class OpencvFuncs():
             self.color_upper = np.array(f['cv']['color_upper'])
         self.track_color_iterate = f['cv']['track_color_iterate']
 
-        # cv_dnn_objects
-        self.net = cv2.dnn.readNetFromCaffe(thisPath + '/models/deploy.prototxt', thisPath + '/models/mobilenet_iter_73000.caffemodel')
+        # Load the pre-trained model (already initialized)
+        self.net = cv2.dnn.readNetFromCaffe(
+            self.this_path + '/models/deploy.prototxt', 
+            self.this_path + '/models/mobilenet_iter_73000.caffemodel'
+        )
+        
+        # List of class names the model can detect
         self.class_names = ["background", "aeroplane", "bicycle", "bird", "boat",
                             "bottle", "bus", "car", "cat", "chair", "cow", "diningtable",
                             "dog", "horse", "motorbike", "person", "pottedplant", "sheep",
@@ -94,21 +169,19 @@ class OpencvFuncs():
         # mediapipe
         self.mpDraw = mp.solutions.drawing_utils
 
-        # mediapipe detect hand
+        # MediaPipe setup for hands
         self.mpHands = mp.solutions.hands
         self.hands = self.mpHands.Hands(max_num_hands=1)
-        self.max_distance = 1
-        self.gs_pic_interval = 6
-        self.gs_pic_last_time = time.time()
+        self.mpDraw = mp.solutions.drawing_utils
 
         # findline autodrive
         self.sampling_line_1 = 0.6
-        self.sampling_line_2 = 0.9
+        self.sampling_line_2 = 0.6
         self.slope_impact = 1.5
         self.base_impact = 0.005
-        self.speed_impact = 0.5
-        self.line_track_speed = 0.3
-        self.slope_on_speed = 0.1
+        self.speed_impact = 0.6
+        self.line_track_speed = 0.5  # Unified definition
+        self.slope_on_speed = 0.4
         self.line_lower = np.array([25, 150, 70])
         self.line_upper = np.array([42, 255, 255])
 
@@ -119,10 +192,10 @@ class OpencvFuncs():
         # mediapipe detect pose
         self.mp_pose = mp.solutions.pose
         self.pose = self.mp_pose.Pose(static_image_mode=False, 
-                                    model_complexity=1, 
-                                    smooth_landmarks=True, 
-                                    min_detection_confidence=0.5, 
-                                    min_tracking_confidence=0.5)
+                                      model_complexity=1, 
+                                      smooth_landmarks=True, 
+                                      min_detection_confidence=0.5, 
+                                      min_tracking_confidence=0.5)
 
         # base data
         self.show_base_info_flag = False
@@ -137,30 +210,64 @@ class OpencvFuncs():
         self.info_show_time = 10
         self.recv_line_max = 26
 
+        # LIDAR Initialization
+        self.lidar_port = lidar_port
+        self.baud_rate = baud_rate
+        self.max_distance = max_distance
+        self.lidar_data = []
+        self.lidar_lock = threading.Lock()
+        self.steering_history = []  # To smooth out steering changes
+
         # mission funcs
         self.mission_flag = False
 
         # osd settings
         self.add_osd = f['base_config']['add_osd']
 
-        # camera type detection
+        # Camera type detection and initialization
         self.usb_camera_connected = self.usb_camera_detection()
+        # Lidar/odometry data comes from base_ctrl (rl.lidar_* and base_data).
+        # Never open /dev/ttyAMA0 here - that is the ESP32 link, and a second
+        # handle corrupts base_ctrl's serial stream (drive stops responding).
+        self.lidar_serial = None
 
-        # usb camera init
+        # Initialize USB camera if connected
         if self.usb_camera_connected:
-            self.camera = cv2.VideoCapture(0)
-            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, f['video']['default_res_w'])
-            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, f['video']['default_res_h'])
+            try:
+                self.camera = cv2.VideoCapture(0)
+                self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, f['video']['default_res_w'])
+                self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, f['video']['default_res_h'])
+                if not self.camera.isOpened():
+                    logging.error("USB camera failed to initialize.")
+            except Exception as e:
+                logging.error(f"Error initializing USB camera: {e}")
+                self.camera = None  # Handle failure to initialize
+        else:
+            self.camera = None  # No USB camera connected
 
-        # csi camera init
+        # Initialize CSI camera if no USB camera
         if not self.usb_camera_connected:
-            print("init csi camera.")
-            self.encoder = H264Encoder(1000000)
-            self.picam2 = Picamera2()
-            self.picam2.configure(self.picam2.create_video_configuration(main={"format": 'XRGB8888', "size": (f['video']['default_res_w'], f['video']['default_res_h'])}))
-            self.picam2.start()
+            try:
+                logging.info("Initializing CSI camera.")
+                self.encoder = H264Encoder(1000000)
+                self.picam2 = Picamera2()
+                self.picam2.configure(self.picam2.create_video_configuration(main={"format": 'XRGB8888', "size": (f['video']['default_res_w'], f['video']['default_res_h'])}))
+                self.picam2.start()
+            except Exception as e:
+                logging.error(f"Error initializing CSI camera: {e}")
+                self.picam2 = None  # Handle failure to initialize CSI camera
 
+        # Ensure there is always a fallback when accessing the camera
+        if not self.camera and not hasattr(self, 'picam2'):
+            logging.error("No camera initialized.")
 
+    def info_scale(self):
+        # Implementation for info_scale
+        pass
+
+    def info_update(self):
+        # Your implementation here
+        print("Info updated!")
 
     def frame_process(self):
         try:
@@ -181,8 +288,11 @@ class OpencvFuncs():
             ret, buffer = cv2.imencode('.jpg', input_frame, [int(cv2.IMWRITE_JPEG_QUALITY), self.video_quality])
             input_frame = buffer.tobytes()
             return input_frame
-
-        # opencv funcs
+    
+        # Reset overlay at the beginning of each frame
+        self.overlay = np.zeros_like(input_frame)
+    
+        # Call specific overlay functions only when required
         if self.cv_mode != f['code']['cv_none']:
             if not self.cv_event.is_set():
                 self.cv_event.set()
@@ -201,80 +311,67 @@ class OpencvFuncs():
                                     (round(0.98*640), round((0.78)*480)), 
                                     self.info_bg_color, -1)
             cv2.addWeighted(self.overlay, 0.5, input_frame, 0.5, 0, input_frame)
-
+    
             # info_deque.appendleft(time.time())
             for i in range(0, len(self.info_deque)):
                 cv2.putText(input_frame, str(self.info_deque[i]['text']), 
                             (round(self.info_scale*640), round(self.info_scale*640 - i * 20)), 
                             cv2.FONT_HERSHEY_SIMPLEX, self.info_deque[i]['size'], self.info_deque[i]['color'], 1)
-
+    
         if self.show_base_info_flag:
             for i in range(0, len(self.recv_deque)):
                 cv2.putText(input_frame, str(self.recv_deque[i]), 
                         (round(0.05*640), round(0.1*640 + i * 13)), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.369, (255, 255, 255), 1)
-
-        # render osd
+    
+        # Call osd_render separately to handle overlay stability
         input_frame = self.osd_render(input_frame)
-
-        # capture frame
-        if self.picture_capture_flag:
-            current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            photo_filename = f'{self.photo_path}photo_{current_time}.jpg'
-            try:
-                cv2.imwrite(photo_filename, input_frame)
-                self.picture_capture_flag = False
-                print(photo_filename)
-            except:
-                pass
-
-        # record video
-        if not self.set_video_record_flag and not self.video_record_status_flag:
-            pass
-        elif self.set_video_record_flag and not self.video_record_status_flag:
-            current_time = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            video_filename = f'{self.video_path}video_{current_time}.mp4'
-            self.writer = imageio.get_writer(video_filename, fps=30)
-            self.video_record_status_flag = True
-        elif self.set_video_record_flag and self.video_record_status_flag:
-            cv2.circle(input_frame, (15, 15), 5, (64, 64, 255), -1)
-            self.writer.append_data(np.array(cv2.cvtColor(input_frame, cv2.COLOR_BGRA2RGB)))
-        elif not self.set_video_record_flag and self.video_record_status_flag:
-            self.video_record_status_flag = False
-            self.writer.close()
-
-        # frame scale
-        if self.scale_rate == 1:
-            pass
-        else:
-            img_height, img_width = input_frame.shape[:2]
-            img_width_d2  = img_width/2
-            img_height_d2 = img_height/2
-            x_start = int(img_width_d2 - (img_width_d2//self.scale_rate))
-            x_end   = int(img_width_d2 + (img_width_d2//self.scale_rate))
-            y_start = int(img_height_d2 - (img_height_d2//self.scale_rate))
-            y_end   = int(img_height_d2 + (img_height_d2//self.scale_rate))
-            input_frame = input_frame[y_start:y_end, x_start:x_end]
-
-        # encode frame
+    
+        # Reset overlay before starting new overlay processes
+        self.overlay = np.zeros_like(input_frame)
+    
+        # Encode frame to avoid issues
         try:
             ret, buffer = cv2.imencode('.jpg', input_frame, [int(cv2.IMWRITE_JPEG_QUALITY), self.video_quality])
             input_frame = buffer.tobytes()
-        except:
-            pass
-
-        # get fps
-        self.fps_count += 1
-        if time.time() - self.fps_start_time >= 2:
-            self.video_fps = self.fps_count/2
-            self.fps_count = 0
-            self.fps_start_time = time.time()
-
-        # output frame
+        except Exception as e:
+            print(f"Encoding error: {e}")
+    
         return input_frame
-
-
-
+        
+    def update_overlay(self, img):
+        """Updates the overlay with the yellow line detection and other info."""
+        try:
+            # Detect yellow line and overlay a circle at its center
+            hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            yellow_mask = cv2.inRange(hsv, self.line_lower, self.line_upper)
+            
+            contours, _ = cv2.findContours(yellow_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            for contour in contours:
+                x, y, w, h = cv2.boundingRect(contour)
+                cx, cy = x + w // 2, y + h // 2
+                cv2.circle(img, (cx, cy), 5, (0, 255, 255), -1)
+            
+            # Use the updated frame as the overlay
+            self.overlay = img
+        except Exception as e:
+            print(f"Overlay update error: {e}")
+            
+    def log_command_output(self, command, response=None):
+        """
+        Logs each command and its response.
+        """
+        logging.info(f"Command sent: {command}")
+        if response:
+            logging.info(f"Response: {response}")
+            
+    def log_command_to_file(self, command):
+        """
+        Logs each command to a specific file for tracking.
+        """
+        with open(self.command_log_file, 'a') as log_file:
+            log_file.write(f"Sending command: {command}\n")
+            
     def usb_camera_detection(self):
         lsusb_output = subprocess.check_output(["lsusb"]).decode("utf-8")
         if "Camera" in lsusb_output:
@@ -283,7 +380,6 @@ class OpencvFuncs():
         else:
             print("USB Camera not connected")
             return False
-
 
     def osd_render(self, osd_frame):
         if not self.add_osd:
@@ -310,8 +406,6 @@ class OpencvFuncs():
                         (100, 50 + sensor_index * 20), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
             sensor_index = sensor_index + 1
-
-
         return osd_frame
 
     def picture_capture(self):
@@ -346,8 +440,6 @@ class OpencvFuncs():
         self.detection_reaction_mode = input_reaction
         if self.detection_reaction_mode == f['code']['re_none']:
             self.set_video_record_flag = False
-
-
 
     def cv_detect_movition(self, img):
         timestamp = datetime.datetime.now()
@@ -481,14 +573,18 @@ class OpencvFuncs():
 
     def cv_detect_objects(self, img):
         overlay_buffer = np.zeros_like(img)
-        cv2.putText(overlay_buffer, 'CV_OBJS', (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        cv2.putText(overlay_buffer, 'Person Detect', (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
+        # Convert to RGB
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
         (h, w) = img.shape[:2]
         blob = cv2.dnn.blobFromImage(cv2.resize(img, (300, 300)), 0.007843, (300, 300), 127.5)
         self.net.setInput(blob)
         detections = self.net.forward()
+
+        objects = []
+        confidences = []
+        boxes = []
 
         for i in range(0, detections.shape[2]):
             confidence = detections[0, 0, i, 2]
@@ -498,12 +594,25 @@ class OpencvFuncs():
                 box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
                 (startX, startY, endX, endY) = box.astype("int")
 
-                label = "{}: {:.2f}%".format(self.class_names[idx], confidence * 100)
-                cv2.rectangle(overlay_buffer, (startX, startY), (endX, endY), (0, 255, 0), 2)
+                # Add shoe detection
+                if self.class_names[idx] == "shoe":
+                    label = "Shoe: {:.2f}%".format(confidence * 100)
+                    cv2.rectangle(overlay_buffer, (startX, startY), (endX, endY), (0, 255, 255), 2)
+                else:
+                    label = "{}: {:.2f}%".format(self.class_names[idx], confidence * 100)
+                    cv2.rectangle(overlay_buffer, (startX, startY), (endX, endY), (0, 255, 0), 2)
+
                 y = startY - 15 if startY - 15 > 15 else startY + 15
                 cv2.putText(overlay_buffer, label, (startX, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
+                # Store detected object information
+                objects.append(self.class_names[idx])
+                confidences.append(confidence)
+                boxes.append((startX, startY, endX, endY))
+
         self.overlay = overlay_buffer
+        return objects, confidences, boxes  # Ensure to return the detected objects
+
 
     def cv_detect_color(self, img):
         global head_light_pwm
@@ -700,118 +809,591 @@ class OpencvFuncs():
             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
         self.overlay = overlay_buffer
+            # UsageCall the method
+    
+    def toggle_gesture_control(self, enable):
+        self.gesture_enabled = enable
+        logging.info(f"Gesture control {'enabled' if enable else 'disabled'}.")
+
+        # Method to continuously listen for wake word
+    # In the listen_for_wake_word method
+    def listen_for_wake_word(self):
+        print("Listening for wake word...")
+        while True:
+            with self.mic_lock:  # Acquire the lock
+                try:
+                    with self.microphone as source:
+                        # Adjust recognizer for ambient noise levels
+                        self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                        audio = self.recognizer.listen(source, timeout=5)
+                    
+                    # Attempt to recognize the wake word
+                    speech_text = self.recognizer.recognize_google(audio).lower()
+                    if self.wake_word in speech_text:
+                        print(f"Wake word '{self.wake_word}' detected.")
+                        self.speaking = True  # Block other actions while speaking
+                        self.respond_to_greeting()
+                except sr.UnknownValueError:
+                    print("Could not understand the audio")
+                except Exception as e:
+                    print(f"Error listening for wake word: {e}")
+                finally:
+                    self.speaking = False  # Ensure this resets after each session
+
+    def detect_gestures(self, img):
+        """Detect hand gestures to control the robot."""
+        if not self.gesture_enabled:
+            return img
+
+        imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        results = self.hands.process(imgRGB)
+        overlay_buffer = np.zeros_like(img)
+
+        if results.multi_hand_landmarks:
+            for handLms in results.multi_hand_landmarks:
+                self.mpDraw.draw_landmarks(overlay_buffer, handLms, mp.solutions.hands.HAND_CONNECTIONS)
+
+                # Extract landmarks for gestures
+                wrist = handLms.landmark[self.mpHands.HandLandmark.WRIST]
+                index_tip = handLms.landmark[self.mpHands.HandLandmark.INDEX_FINGER_TIP]
+                middle_tip = handLms.landmark[self.mpHands.HandLandmark.MIDDLE_FINGER_TIP]
+                thumb_tip = handLms.landmark[self.mpHands.HandLandmark.THUMB_TIP]
+
+                # Stop gesture: hand raised
+                if index_tip.y < wrist.y and middle_tip.y < wrist.y:
+                    self.gesture_stop = True
+                    self.follow_mode = False
+                    self.stop_robot()
+                    cv2.putText(overlay_buffer, "STOP", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+
+                # Follow gesture: hand forward or downward
+                elif wrist.y < index_tip.y < wrist.y + 0.2 and thumb_tip.y > wrist.y:
+                    self.follow_mode = True
+                    self.gesture_stop = False
+                    self.start_follow_mode()
+                    cv2.putText(overlay_buffer, "FOLLOW", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+                # Resume gesture: hand lowered to resume motion
+                elif wrist.y < index_tip.y and not self.gesture_stop:
+                    self.follow_mode = False
+                    self.resume_robot()
+                    cv2.putText(overlay_buffer, "RESUME", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+
+        img = cv2.addWeighted(img, 1, overlay_buffer, 1, 0)
+        return img
+        
+    def learn_from_line(self):
+        if len(self.line_memory) < 10:  # Ensure enough data points for training
+            return None
+        
+        # Prepare data for learning
+        line_positions = np.array([data['line_center_x'] for data in self.line_memory]).reshape(-1, 1)
+        turn_angles = np.array([data['turning_angle'] for data in self.line_memory])
+        
+        # Train the model to predict turning angle based on line center position
+        self.model.fit(line_positions, turn_angles)
+
+    def predict_turning(self, line_center_x):
+        # Predict turning angle using the learned model
+        return self.model.predict(np.array([[line_center_x]]))[0] if len(self.line_memory) >= 10 else None
+
+    def stop_robot(self):
+        # Send command to stop the robot
+        print("Stopping the robot.")
+
+    def start_follow_mode(self):
+        # Send command to start following
+        print("Starting follow mode.")
+
+    def resume_robot(self):
+        # Send command to resume motion
+        print("Resuming robot motion.")
+    def cv_process(self, frame):
+        """
+        Enhanced cv_process to include gesture detection.
+        """
+        super().cv_process(frame)  # Call any base class processing
+        self.detect_gestures(frame)  # Call the gesture detection method
+        
+    def draw_lidar_box(self, img, lidar_data):
+        height, width = img.shape[:2]
+        box_width = 200
+        box_height = 150
+        box_x = width - box_width - 10
+        box_y = (height // 2) - (box_height // 2)
+        
+        cv2.rectangle(img, (box_x, box_y), (box_x + box_width, box_y + box_height), (0, 255, 0), 2)
+        cv2.rectangle(img, (box_x + 1, box_y + 1), (box_x + box_width - 1, box_y + box_height - 1), (0, 0, 0), -1)
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        line_height = 20
+        max_lines = min(len(lidar_data), 5)
+        for i in range(max_lines):
+            text = f"Dist {i + 1}: {lidar_data[i]:.2f}m"
+            cv2.putText(img, text, (box_x + 10, box_y + 30 + (i * line_height)), font, 0.5, (255, 255, 255), 1)
+
+        return img
+
+    def read_lidar(self):
+        """Sample wheel odometry from base_ctrl's parsed ESP32 feedback
+        (odl/odr in base_data). Never opens /dev/ttyAMA0 directly - a second
+        handle corrupts base_ctrl's serial stream."""
+        try:
+            bd = self.base_ctrl.base_data
+            if bd:
+                odl = bd.get("odl")
+                odr = bd.get("odr")
+                if odl is not None and odr is not None:
+                    self.lidar_data.append((odl, odr))
+                    if len(self.lidar_data) > 100:
+                        self.lidar_data.pop(0)
+        except Exception as e:
+            logging.info(f"Error reading LIDAR data: {e}")
+
+    def toggle_listening(self):
+        """Toggle listening state on/off."""
+        if not self.listening_active:
+            self.listening_active = True
+            logging.info("Activating listening mode.")
+            self.listening_thread = threading.Thread(target=self.listen_and_respond)
+            self.listening_thread.start()
+        else:
+            self.listening_active = False
+            logging.info("Deactivating listening mode.")
+
+    def listen_and_respond(self):
+        """Continuously listens for the wake word if listening is active."""
+        logging.info("Lucy listening for the wake word.")
+        while self.listening_active:
+            with self.speech_lock:  # Lock microphone access
+                try:
+                    with self.microphone as source:
+                        self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                        audio = self.recognizer.listen(source, timeout=5)
+                    # Check for wake word
+                    speech_text = self.recognizer.recognize_google(audio).lower()
+                    logging.info(f"Detected: '{speech_text}'")
+                    if self.wake_word in speech_text:
+                        logging.info(f"Wake word '{self.wake_word}' detected.")
+                        self.initiate_interaction()
+                except sr.UnknownValueError:
+                    logging.warning("Could not understand the audio")
+                except sr.RequestError as e:
+                    logging.error(f"Speech recognition error: {e}")
+                except Exception as e:
+                    logging.error(f"Error listening for wake word: {e}")
+                    
+    def initiate_interaction(self):
+        """Initiates the interaction sequence after wake word detection."""
+        logging.info("Starting interaction sequence.")
+        # Toggle lights on and greet the user
+        self.toggle_lights(True)
+        self.speak("Hi, how can I be of service?")
+        
+        # Listen for a follow-up question or command
+        self.listen_for_question()
+        self.toggle_lights(False)  # Turn off lights after interaction
+        
+    def feedback_data(self, raw_data):
+        """
+        Processes incoming data and parses JSON with added error handling.
+        """
+        try:
+            # Remove any control characters or extraneous whitespace
+            cleaned_data = raw_data.strip()
+            
+            # Parse JSON and handle any parsing errors
+            data = json.loads(cleaned_data)
+            logging.info(f"Parsed feedback data: {data}")
+            
+            # Proceed with processing parsed data
+            self.process_feedback_data(data)
+        
+        except json.JSONDecodeError as e:
+            # Log the full raw data to diagnose JSON issues
+            logging.error(f"[base_ctrl.feedback_data] JSON decode error: {e} - Raw data: {raw_data}")
+        except Exception as e:
+            logging.error(f"[base_ctrl.feedback_data] Unexpected error: {e} - Raw data: {raw_data}")
+            
+    def process_feedback_data(self, data):
+        """
+        Processes parsed JSON feedback data from the base controller.
+        """
+        try:
+            # Check for status updates
+            if "status" in data:
+                status = data["status"]
+                logging.info(f"Status update received: {status}")
+                # Take actions based on status, e.g., start/stop robot or adjust speed
+                if status == "ready":
+                    self.robot_ready = True
+                elif status == "busy":
+                    self.robot_ready = False
+    
+            # Check for error messages
+            if "error" in data:
+                error_message = data["error"]
+                logging.error(f"Error from base controller: {error_message}")
+                # You might add custom handling for certain error codes here
+    
+            # Check for sensor data updates
+            if "sensor_data" in data:
+                sensor_data = data["sensor_data"]
+                self.update_sensors(sensor_data)
+                logging.info(f"Sensor data updated: {sensor_data}")
+    
+            # Handle any command feedback
+            if "command_feedback" in data:
+                command_feedback = data["command_feedback"]
+                logging.info(f"Command feedback received: {command_feedback}")
+                # Act on feedback, such as adjusting parameters if feedback indicates so
+    
+            # Example: Check for specific JSON fields and act on them
+            if "battery_level" in data:
+                battery_level = data["battery_level"]
+                logging.info(f"Battery level: {battery_level}%")
+                if battery_level < 20:
+                    self.warn_low_battery()
+    
+            # Add additional processing as needed
+    
+        except Exception as e:
+            logging.error(f"[process_feedback_data] Unexpected error while processing data: {e}")
 
     def cv_auto_drive(self, img):
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-
-        # get a sampling
+        img = cv2.resize(img, (640, 480))
         height, width = img.shape[:2]
-        center_x, center_y = width // 2, height // 2
-        mask_sampling = np.zeros((height, width), dtype=np.uint8)
-        cv2.circle(mask_sampling, (center_x, center_y), int(self.sampling_rad/4), (255), thickness=-1)
-        masked_hsv = cv2.bitwise_and(hsv, hsv, mask=mask_sampling)
-        masked_hsv_pixels = masked_hsv[mask_sampling == 255]
-        lower_hsv = np.min(masked_hsv_pixels, axis=0)
-        upper_hsv = np.max(masked_hsv_pixels, axis=0)
-
-        # select the line color & get the mask
-        # img = cv2.GaussianBlur(img, (11, 11), 0)
-        line_mask = cv2.inRange(hsv, self.line_lower, self.line_upper)
+        center_x = width // 2
+    
+        # Detect the yellow line
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        yellow_lower = np.array([20, 100, 100])
+        yellow_upper = np.array([30, 255, 255])
+        line_mask = cv2.inRange(hsv, yellow_lower, yellow_upper)
         line_mask = cv2.erode(line_mask, None, iterations=2)
         line_mask = cv2.dilate(line_mask, None, iterations=2)
-
-        sampling_h1 = int(height * self.sampling_line_1)
-        sampling_h2 = int(height * self.sampling_line_2)
-
-        get_sampling_1 = line_mask[sampling_h1]
-        get_sampling_2 = line_mask[sampling_h2]
-
-        sampling_width_1 = np.sum(get_sampling_1 == 255)
-        sampling_width_2 = np.sum(get_sampling_2 == 255)
-
-        if sampling_width_1:
-            sam_1 = True
+    
+        # Set the ROI to a lower portion of the frame
+        roi_height_start = int(height * 0.75)
+        roi = line_mask[roi_height_start:height, :]
+    
+        # Find contours in the ROI for line tracking
+        contours, _ = cv2.findContours(roi, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        weighted_sum_x = 0
+        total_weight = 0
+        line_detected = False
+        detection_ball_position = (center_x, int(height * 0.9))  # Default position at the center bottom of the overlay
+    
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            contour_center_x = x + (w // 2)
+            contour_area = cv2.contourArea(contour)
+    
+            # Calculate weighted center for line position
+            weighted_sum_x += contour_center_x * contour_area
+            total_weight += contour_area
+    
+        if total_weight > 0:
+            line_center_x = weighted_sum_x / total_weight
+            error = center_x - line_center_x
+            line_detected = True
+            detection_ball_position = (int(line_center_x), int(height * 0.9))
+    
+            # Add the detected line data to memory
+            turning_angle = (0.025 * error)
+            self.line_memory.append({
+                'line_center_x': line_center_x,
+                'turning_angle': turning_angle,
+                'width': w,
+                'height': h
+            })
+    
+            # Train model periodically
+            if len(self.line_memory) >= 10:
+                self.learn_from_line()
+    
+            # Predict turning angle from learned model
+            predicted_turning = self.predict_turning(line_center_x)
+            turning = predicted_turning if predicted_turning is not None else turning_angle
         else:
-            sam_1 = False
-        if sampling_width_2:
-            sam_2 = True
+            error = 0
+            line_detected = False
+            turning = 15  # Default turning angle when line is lost
+    
+        # Draw the detection ball on the overlay
+        overlay = img.copy()
+        ball_color = (0, 255, 0) if line_detected else (0, 0, 255)
+        cv2.circle(overlay, detection_ball_position, 10, ball_color, -1)
+        img = cv2.addWeighted(overlay, 0.5, img, 0.5, 0)
+    
+        # Detect objects in the frame, specifically looking for persons
+        stop_robot = False
+        objects, _, boxes = self.cv_detect_objects(img)
+        
+        # Check if any detected objects are persons
+        for obj_class, box in zip(objects, boxes):
+            x_min, y_min, x_max, y_max = box
+            if obj_class == "person":
+                stop_robot = True
+                # Draw bounding box for the detected person
+                cv2.rectangle(img, (x_min, y_min), (x_max, y_max), (0, 0, 255), 2)
+                cv2.putText(img, "Person Detected", (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                threading.Thread(target=self.announce_person_detected).start()  # Announce detection if needed
+    
+        # Set speed based on line and person detection
+        final_speed = self.line_track_speed * 0.6 if line_detected else self.line_track_speed * 0.4
+        if stop_robot:
+            final_speed = 0  # Stop the robot if a person is detected
+    
+        # ROS control command for four-wheel drive
+        command = {"T": 13, "X": final_speed, "Z": turning, "ALL_WHEELS": True}
+        self.send_base_command(command)
+    
+        # Update previous error for PID
+        self.prev_error = error
+
+
+    def toggle_listening(self):
+        """Toggle listening state on/off."""
+        self.listening_active = not self.listening_active
+        if self.listening_active:
+            print("Listening mode activated.")
         else:
-            sam_2 = False
+            print("Listening mode deactivated.")
 
-        line_index_1 = np.where(get_sampling_1 == 255)
-        line_index_2 = np.where(get_sampling_2 == 255)
+    def update_sensors(self, sensor_data):
+        # Process and store sensor data; e.g., LIDAR, proximity, etc.
+        self.sensors = sensor_data  # Store or process data as needed
+        logging.info(f"Updated sensor data: {sensor_data}")
+    
+    def warn_low_battery(self):
+        # Actions to take when battery is low
+        logging.warning("Battery level is low! Consider charging soon.")
+        self.send_base_command({"T": 13, "X": 0, "Z": 0})  # Stop robot if low on battery
+           
+    def play_speech(self, text):
+        if self.speaking:
+            print("Audio already playing; unable to start a new one.")
+            return
+        self.speaking = True
+        self.tts_engine.say(text)
+        try:
+            self.tts_engine.runAndWait()
+        except RuntimeError:
+            print("Audio playback error.")
+        finally:
+            self.speaking = False
 
-        if sam_1:
-            sampling_1_left  = line_index_1[0][0]
-            sampling_1_right = line_index_1[0][sampling_width_1 - 1]
-            sampling_1_center= int((sampling_1_left + sampling_1_right) / 2)
-        if sam_2:
-            sampling_2_left  = line_index_2[0][0]
-            sampling_2_right = line_index_2[0][sampling_width_2 - 1]
-            sampling_2_center= int((sampling_2_left + sampling_2_right) / 2)
+    # Additional Updates for Improvements
+    def announce_person_detected(self):
+        current_time = time.time()
+        if self.speaking or (current_time - self.last_announcement_time) < self.announcement_cooldown:
+            return
+        self.speaking = True
+        threading.Thread(target=self._make_announcement).start()
+    
+    def _make_announcement(self):
+        try:
+            # Stop the robot before interaction
+            self.robot_moving = False
+            self.send_base_command({"T": 13, "X": 0, "Z": 0})
+    
+            # Create a speech synthesizer
+            synthesizer = speechsdk.SpeechSynthesizer(speech_config=self.speech_config)
+    
+            # Synthesize the greeting
+            synthesizer.speak_text_async("Hi, how can I be of service?").get()
+            self.last_announcement_time = time.time()
+    
+            # Start interaction after greeting
+            self.listen_for_question()
+    
+        finally:
+            # Allow the robot to move again after interaction
+            self.robot_moving = True
+            self.speaking = False
+    
+    def query_copilot(self, question):
+        try:
+            # Assuming openai.api_key is already set
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",  # or another compatible model, adjust as needed
+                messages=[{"role": "user", "content": question}]
+            )
+            
+            # Extract the assistant's reply
+            answer = response['choices'][0]['message']['content'].strip()
+            logging.info(f"Response from Copilot: {answer}")
+            return answer
+        
+        except Exception as e:
+            logging.info(f"Error querying Copilot: {e}")
+            return "Sorry, I couldn't process that request."
+    
+    # Existing listen_for_question method
+    def listen_for_question(self):
+        with self.microphone as source:
+            synthesizer = speechsdk.SpeechSynthesizer(speech_config=self.speech_config)
+            synthesizer.speak_text_async("Listening.").get()
+            
+            audio = self.recognizer.listen(source, timeout=5)
+            try:
+                question = self.recognizer.recognize_google(audio).lower()
+                print(f"Recognized question: {question}")
+                
+                # Check for specific control commands
+                if "start auto drive" in question:
+                    self.execute_command("start_auto_drive")
+                elif "stop auto drive" in question:
+                    self.execute_command("stop_auto_drive")
+                else:
+                    # If not a direct command, send to query processing
+                    response = self.query_copilot(question)
+                    synthesizer.speak_text_async(response).get()
+            
+            except sr.UnknownValueError:
+                synthesizer.speak_text_async("Sorry, I didn't catch that.").get()
+    
+    def execute_command(self, command):
+        logging.info(f"Executing command: {command}")
+        if command == "start_auto_drive":
+            logging.info("Starting auto drive...")
+            self.set_cv_mode(f['code']['cv_auto'])  # Automatically switch to auto drive mode
+            self.robot_moving = True
+            self.cv_auto_drive_active = True  # Flag to track auto-drive status
+            
+            # Optionally, provide feedback to the user
+            self.speak_text("Auto-drive has started.")
+            
+        elif command == "stop_auto_drive":
+            logging.info("Stopping auto drive...")
+            self.robot_moving = False
+            self.cv_auto_drive_active = False  # Disable auto-drive flag
+            self.set_cv_mode(f['code']['cv_none'])  # Reset mode to default
+            
+            # Provide feedback to the user
+            self.speak_text("Auto-drive has stopped.")
 
-        line_slope = 0
-        input_speed = 0
-        input_turning = 0
-        if sam_1 and sam_2:
-            line_slope = (sampling_1_center - sampling_2_center) / abs(sampling_h1 - sampling_h2)
-            impact_by_slope = self.slope_on_speed * abs(line_slope)
-            # if impact_by_slope > input_speed:
-            #     impact_by_slope = input_speed
-            input_speed = self.line_track_speed - impact_by_slope
-            # print(f'im_by_slope:{impact_by_slope}   input_speed:{input_speed}')
-            input_turning = -(line_slope * self.slope_impact + (sampling_2_center - center_x) * self.base_impact) #+ (speed_impact * input_speed)
-        elif not sam_1 and sam_2:
-            input_speed = 0
-            input_turning = (sampling_2_center - center_x) * self.base_impact
-        elif sam_1 and not sam_2:
-            input_speed = (self.line_track_speed / 3)
-            input_turning = 0
-        else:
-            input_speed = - (self.line_track_speed / 3)
-            input_turning = 0
+    # Start the wake word detection in a separate thread
+    def start_listening(self):
+        Thread(target=self.listen_for_wake_word, daemon=True).start()
+    
+    # Ensure no movement during interaction
+    def handle_interaction(self):
+        self.robot_moving = False
+        self.listen_for_question()
+        self.robot_moving = True
+        
+    def send_base_command(self, command):
+        """
+        Send a command to the base controller and log it to both file and log system.
+        """
+        try:
+            # Log command to file
+            self.log_command_to_file(command)
 
-        # input_turning = - line_slope * slope_impact
-        # try:
-        #     input_turning = -(sampling_2_center - center_x) * base_impact
-        # except:
-        #     pass
-        if not self.cv_movtion_lock:
-            self.base_ctrl.base_json_ctrl({"T":13,"X":input_speed,"Z":input_turning})
+            # Send the command and get the response
+            response = self.base_ctrl.base_json_ctrl(command)
 
-        overlay_buffer = np.zeros_like(img)
-        overlay_buffer = cv2.cvtColor(line_mask, cv2.COLOR_GRAY2BGR)
+            # Log response for debugging
+            logging.info(f"Raw response: {response}")
+            if response:
+                try:
+                    response_data = json.loads(response)
+                    logging.info(f"Parsed response data: {response_data}")
+                except json.JSONDecodeError as e:
+                    logging.warning(f"JSON decode error: {e} with response: {response}")
+            else:
+                logging.warning("Received empty response from base controller.")
+        except Exception as e:
+            logging.warning(f"Error sending command to base controller: {e}")    ### Environment Learning and Memory Buffer:
+        # Greet user and handle interaction after wake word
+    def respond_to_greeting(self):
+        synthesizer = speechsdk.SpeechSynthesizer(speech_config=self.speech_config)
+        
+        # Greet the user
+        synthesizer.speak_text_async("Hi, how can I be of service?").get()
+        self.last_announcement_time = time.time()
 
-        cv2.putText(overlay_buffer, 'Line Following', (100, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-        cv2.circle(overlay_buffer, (center_x, center_y), int(self.sampling_rad/4), (64, 255, 64), 1)
+        # Start interaction for a question
+        self.listen_for_question()
 
-        cv2.putText(overlay_buffer, ' SAM_H1: {}'.format(self.sampling_line_1), (center_x-150, sampling_h1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 128, 128), 1)
-        cv2.putText(overlay_buffer, ' SAM_H2: {}'.format(self.sampling_line_2), (center_x-150, sampling_h2-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 128, 128), 1)
+        # Resume robot activities after interaction
+        self.speaking = False
 
-        cv2.putText(overlay_buffer, f'X: {input_speed:.2f}, Z: {input_turning:.2f}', (center_x+50, center_y+0), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    
+    def learn_environment(self):
+        # Capture current environment data, e.g., from LIDAR, and store it in memory
+        surrounding_data = {
+            'lidar': self.lidar_data,
+            'position': self.get_current_position(),
+            # Add other relevant sensor data here
+        }
+        with open("environment_memory.json", "a") as f:
+            json.dump(surrounding_data, f)
+            logging.info(surrounding_data)
+            f.write("\n")
 
-        cv2.putText(overlay_buffer, ' UPPER: {}'.format(upper_hsv), (center_x+50, center_y+40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(overlay_buffer, ' LOWER: {}'.format(lower_hsv), (center_x+50, center_y+60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    def lidar_detect_human(self):
+        object_close = False
 
-        cv2.putText(overlay_buffer, ' UPPER: {}'.format(self.line_upper), (center_x+50, center_y+100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 128, 128), 1)
-        cv2.putText(overlay_buffer, ' LOWER: {}'.format(self.line_lower), (center_x+50, center_y+120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 128, 128), 1)
-        cv2.putText(overlay_buffer, f' SLOPE: {line_slope:.2f}', (center_x+50, center_y+140), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 128, 128), 1)
-        cv2.putText(overlay_buffer, f' SAM_1 SAM_2 SLOPE_IM BASE_IM SPD_IM LT_SPD SLOPE_SPD', (center_x-250, center_y-70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 128, 128), 1)
-        cv2.putText(overlay_buffer, f' {self.sampling_line_1:.2f}   {self.sampling_line_2:.2f}   {self.slope_impact:.2f}      {self.base_impact:.4f}  {self.speed_impact:.2f}    {self.line_track_speed:.2f}    {self.slope_on_speed:.2f}', (center_x-250, center_y-50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 128, 128), 1)
+        if self.lidar_data:
+            min_distance_left = min([data[0] for data in self.lidar_data])
+            min_distance_right = min([data[1] for data in self.lidar_data])
 
-        cv2.line(overlay_buffer, (0, sampling_h1), (width, sampling_h1), (255, 0, 0), 2)
-        cv2.line(overlay_buffer, (0, sampling_h2), (width, sampling_h2), (255, 0, 0), 2)
+            self.lidar_distance_left = min_distance_left / 1000.0
+            self.lidar_distance_right = min_distance_right / 1000.0
 
-        if sam_1:
-            cv2.line(overlay_buffer, (sampling_1_left, sampling_h1+20), (sampling_1_left, sampling_h1-20), (0, 255, 0), 2)
-            cv2.line(overlay_buffer, (sampling_1_right, sampling_h1+20), (sampling_1_right, sampling_h1-20), (0, 255, 0), 2)
-        if sam_2:
-            cv2.line(overlay_buffer, (sampling_2_left, sampling_h2+20), (sampling_2_left, sampling_h2-20), (0, 255, 0), 2)
-            cv2.line(overlay_buffer, (sampling_2_right, sampling_h2+20), (sampling_2_right, sampling_h2-20), (0, 255, 0), 2)
-        if sam_1 and sam_2:
-            cv2.line(overlay_buffer, (sampling_1_center, sampling_h1), (sampling_2_center, sampling_h2), (255, 0, 0), 2)
+            if self.lidar_distance_left < 1.0 or self.lidar_distance_right < 1.0:
+                object_close = True
 
-        self.overlay = overlay_buffer
+        return object_close
+        
+    def send_base_command(self, command):
+        """
+        Send a command to the base controller and log the output.
+        """
+        try:
+            # Log the command being sent
+            self.log_command_output(command)
+            
+            # Send the command
+            response = self.base_ctrl.base_json_ctrl(command)
+
+            # Log the raw response if available
+            logging.info(f"Raw response: {response}")
+            if response:
+                # Attempt to parse the response as JSON
+                try:
+                    response_data = json.loads(response)
+                    logging.info(f"Parsed response data: {response_data}")
+                except json.JSONDecodeError as e:
+                    logging.warning(f"JSON decode error: {e} with response: {response}")
+            else:
+                logging.warning("Received empty response from base controller.")
+        except Exception as e:
+            logging.warning(f"Error sending command to base controller: {e}")
+    # Example for other command methods
+    def execute_command(self, command):
+        """
+        Executes specific robot commands (e.g., start/stop auto drive) and logs them.
+        """
+        logging.info(f"Executing command: {command}")
+        if command == "start_auto_drive":
+            logging.info("Starting auto drive...")
+            self.set_cv_mode(f['code']['cv_auto'])
+            self.robot_moving = True
+            self.cv_auto_drive_active = True
+            self.log_command_output({"action": "start_auto_drive"})
+
+        elif command == "stop_auto_drive":
+            logging.info("Stopping auto drive...")
+            self.robot_moving = False
+            self.cv_auto_drive_active = False
+            self.set_cv_mode(f['code']['cv_none'])
+            self.log_command_output({"action": "stop_auto_drive"})
+
+    # Add log_command_output calls to other methods as needed
 
     def mediaPipe_faces(self, img):
         image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -833,8 +1415,6 @@ class OpencvFuncs():
         if results.pose_landmarks:
             self.mpDraw.draw_landmarks(overlay_buffer, results.pose_landmarks, self.mp_pose.POSE_CONNECTIONS)
         self.overlay = overlay_buffer
-
-
 
     def info_update(self, megs, color, size):
         if megs == -1:
