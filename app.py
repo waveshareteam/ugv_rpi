@@ -907,11 +907,24 @@ def lidar_points():
     distances in mm.  Returns empty lists when LIDAR is not connected.
     """
     try:
-        angles = list(base.rl.lidar_angles_show)
-        distances = list(base.rl.lidar_distances_show)
+        now = time.time()
+        # Prefer the dense 1-degree occupancy picture (last 3 s, built from
+        # every valid packet across revolutions); fall back to the last raw
+        # scan when the bins are empty.
+        bins = getattr(base.rl, 'lidar_bins', None)
+        angles, distances = [], []
+        if bins:
+            for deg in range(360):
+                d, ts = bins[deg]
+                if d > 0 and (now - ts) < 3.0:
+                    angles.append(deg * 3.14159265358979 / 180.0)
+                    distances.append(d)
+        if not angles:
+            angles = list(base.rl.lidar_angles_show)
+            distances = list(base.rl.lidar_distances_show)
         hw_ok = (base.rl.lidar_ser is not None)
         streaming = getattr(base.rl, 'lidar_scan_time', 0.0) > 0 and \
-            (time.time() - base.rl.lidar_scan_time) < 3.0
+            (now - base.rl.lidar_scan_time) < 3.0
         return jsonify({
             'angles': angles,
             'distances': distances,
@@ -1289,11 +1302,12 @@ def lidar_recv_loop():
                 time.sleep(3)
                 continue
         try:
-            base.rl.lidar_data_recv()   # blocks until one full 360° rotation
+            base.rl.lidar_data_recv()   # pumps ~100 ms of stream, self-resyncs
         except Exception as e:
             print(f"[lidar] recv error: {e}")
             base.rl.lidar_ser = None    # trigger reconnect
             time.sleep(1)
+        time.sleep(0.01)                # yield; recv() already throttles by data
 
 
 def manual_control_watchdog():

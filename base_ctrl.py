@@ -49,6 +49,13 @@ class ReadLine:
 		self.lidar_distances_show = []
 		self.lidar_scan_time = 0.0
 		self.last_start_angle = 0
+		# 1-degree occupancy bins: (distance_mm, timestamp).  /lidar_points
+		# serves these (last 3 s) so the radar shows a dense, smoothed picture
+		# built from several revolutions instead of one sparse partial scan.
+		self.lidar_bins = [(0.0, 0.0) for _ in range(360)]
+		# Rolling read buffer + bookkeeping for the non-blocking scanner.
+		self._lbuf = bytearray()
+		self._last_rx = 0.0
 
 	def readline(self):
 		i = self.buf.find(b"\n")
@@ -112,40 +119,106 @@ class ReadLine:
 		return start_angle
 
 	def lidar_data_recv(self):
-		if self.lidar_ser == None:
+		"""Pump the lidar stream for up to ~100 ms and publish whatever is new.
+
+		The wire from this kit is marginal, so bytes frequently arrive corrupted;
+		the old reader blocked until a perfect 360-degree wrap and could spin for
+		many seconds on garbage (radar "randomly" stops and never restarts).  This
+		scanner instead:
+		  - scans a rolling buffer for 0x54 0x2C frame headers (self-resyncing),
+		  - validates each frame (FSYNC + angle ordering + plausibility) and
+		    drops corrupt ones,
+		  - stamps every parsed point into 1-degree occupancy bins,
+		  - publishes the last partial scan after 2.5 s without a clean wrap so
+		    the UI keeps moving on a degraded wire.
+		Returns quickly; call in a loop from the reader thread.
+		"""
+		if self.lidar_ser is None:
 			return
 		try:
-			while True:
-				self.header = self.lidar_ser.read(1)
-				if self.header == b'\x54':
-					# Read the rest of the data
-					data = self.header + self.lidar_ser.read(46)
-					hex_data = [int(hex(byte), 16) for byte in data]
-					start_angle = self.parse_lidar_frame(hex_data)
-					if self.last_start_angle > start_angle:
-						break
-					self.last_start_angle = start_angle
-				else:
-					self.lidar_ser.flushInput()
+			t_now = time.time()
+			# Pull whatever arrived recently into the rolling buffer.
+			if self.lidar_ser.in_waiting > 0:
+				self._lbuf.extend(self.lidar_ser.read(min(self.lidar_ser.in_waiting, 8192)))
+				if len(self._lbuf) > 65536:
+					del self._lbuf[:16384]
+				self._last_rx = t_now
+			elif t_now - self._last_rx > 2.0 and self._lbuf:
+				# Port went silent mid-frame: drop partial bytes so the next
+				# real packet is not mis-aligned by stale leading garbage.
+				self._lbuf.clear()
 
-			self.last_start_angle = start_angle
-			self.lidar_angles_show = self.lidar_angles.copy()
-			self.lidar_distances_show = self.lidar_distances.copy()
-			# One full revolution was just published - stamp it so the UI can
-			# tell "sensor streaming" apart from "port open but silent".
-			self.lidar_scan_time = time.time()
-			self.lidar_angles.clear()
-			self.lidar_distances.clear()
+			# Harvest every complete valid frame currently in the buffer.
+			consume = 0
+			while True:
+				i = self._lbuf.find(b'\x54\x2C', consume)
+				if i < 0 or len(self._lbuf) - i < 47:
+					break
+				frame = bytes(self._lbuf[i:i+47])
+				if not self._frame_valid(frame):
+					consume = i + 1          # false header - resync one byte on
+					continue
+				start_angle = self.parse_lidar_frame(list(frame))
+				self._stamp_bins(frame)
+				consume = i + 47
+				# Wrap detected: start angle went backwards -> full revolution.
+				if self.last_start_angle > start_angle:
+					self.lidar_angles_show = self.lidar_angles.copy()
+					self.lidar_distances_show = self.lidar_distances.copy()
+					self.lidar_scan_time = t_now
+					self.lidar_angles.clear()
+					self.lidar_distances.clear()
+				self.last_start_angle = start_angle
+			if consume:
+				del self._lbuf[:consume]
+
+			# Degraded wire: no clean wrap for 2.5 s -> publish what we have so
+			# the radar keeps updating instead of freezing on stale data.
+			if self.lidar_angles and t_now - self.lidar_scan_time > 2.5:
+				self.lidar_angles_show = self.lidar_angles.copy()
+				self.lidar_distances_show = self.lidar_distances.copy()
+				self.lidar_scan_time = t_now
+				self.lidar_angles.clear()
+				self.lidar_distances.clear()
 		except Exception as e:
 			print(f"[base_ctrl.lidar_data_recv] error: {e}")
 			try:
-				usb = sorted(glob.glob('/dev/ttyUSB*'))
-				acm = sorted(glob.glob('/dev/ttyACM*'))
-				port = usb[0] if usb else (acm[0] if acm else None)
-				if port:
-					self.lidar_ser = serial.Serial(port, 230400, timeout=1)
+				self.lidar_ser.close()
 			except Exception:
-				self.lidar_ser = None
+				pass
+			self.lidar_ser = None   # reader loop in app.py reconnects
+
+	def _frame_valid(self, f):
+		"""Sanity-check one 47-byte STL-19P packet; rejects wire-corrupted frames."""
+		if f[0] != 0x54 or f[1] != 0x2C:
+			return False
+		start_angle = (f[5] << 8 | f[4]) * 0.01
+		end_angle = (f[43] << 8 | f[42]) * 0.01
+		if start_angle > 360.0 or end_angle > 360.0:
+			return False
+		# End must not lag start by more than the packet's angular span
+		# (12 points x <=0.72 deg nominal, allow generous slop for speed change).
+		if (end_angle - start_angle) % 360.0 > 14.4:
+			return False
+		# Sample count in verlen low nibble must be 12 for this format.
+		if (f[1] & 0x0F) != 12:
+			return False
+		return True
+
+	def _stamp_bins(self, f):
+		"""Write each of the packet's 12 samples into the 1-degree occupancy bins."""
+		start_angle = (f[5] << 8 | f[4]) * 0.01
+		now = time.time()
+		for k in range(12):
+			off = 6 + k * 3
+			dist = f[off] | (f[off + 1] << 8)
+			if dist == 0:
+				continue
+			ang = int((start_angle + k * 0.83333 + 180.0) % 360)
+			old_d, old_t = self.lidar_bins[ang]
+			if now - old_t > 3.0 or dist < old_d or old_d == 0.0:
+				# Fresh cell, or closer reading wins (obstacle safety).
+				self.lidar_bins[ang] = (float(dist), now)
 
 
 class BaseController:
