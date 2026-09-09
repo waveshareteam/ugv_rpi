@@ -27,20 +27,7 @@ class ReadLine:
 			self.sensor_data_ser = None
 		self.sensor_data_max_len = 51
 
-		try:
-			# The D500 lidar enumerates as its own CP210x USB-serial bridge
-			# (/dev/ttyUSB*) when powered via USB; prefer it over the ESP32
-			# base board's CDC port (/dev/ttyACM*) so we never read the wrong
-			# device. Fall back to ttyACM* for UART-wired kits.
-			usb = sorted(glob.glob('/dev/ttyUSB*'))
-			acm = sorted(glob.glob('/dev/ttyACM*'))
-			port = usb[0] if usb else (acm[0] if acm else None)
-			if port is None:
-				raise IOError('no serial device for lidar')
-			self.lidar_ser = serial.Serial(port, 230400, timeout=1)
-			print(f"lidar serial connected succeed on {port}")
-		except:
-			self.lidar_ser = None
+		self.open_lidar_serial()
 		self.ANGLE_PER_FRAME = 12
 		self.HEADER = 0x54
 		self.lidar_angles = []
@@ -64,6 +51,72 @@ class ReadLine:
 		self._rate_frames = 0
 		self.rx_bps = 0.0
 		self.frames_per_s = 0.0
+
+	def _pick_lidar_port(self):
+		"""The D500 kit's adapter is a CP210x bridge on /dev/ttyUSB*; older
+		UART-wired kits stream through the ESP32 base board on /dev/ttyACM*.
+		Prefer the USB bridge, fall back to the base board."""
+		usb = sorted(glob.glob('/dev/ttyUSB*'))
+		acm = sorted(glob.glob('/dev/ttyACM*'))
+		return usb[0] if usb else (acm[0] if acm else None)
+
+	def open_lidar_serial(self):
+		"""(Re)open the lidar serial port on the best available device.
+		De-asserts DTR/RTS: CP210x adapters can route those lines to the
+		sensor's reset/PWM, and pyserial asserts them on open by default,
+		which can hold the STL-19P in a dead state."""
+		port = self._pick_lidar_port()
+		if port is None:
+			print("[lidar] no serial device for lidar")
+			self.lidar_ser = None
+			return
+		try:
+			if self.lidar_ser is not None:
+				try:
+					self.lidar_ser.close()
+				except Exception:
+					pass
+				self.lidar_ser = None
+			s = serial.Serial(port, 230400, timeout=1, dsrdtr=False, rtscts=False)
+			try:
+				s.dtr = False
+				s.rts = False
+			except Exception:
+				pass
+			self.lidar_ser = s
+			self.last_start_angle = 0
+			self._lbuf.clear()
+			print(f"lidar serial connected succeed on {port}")
+		except Exception as e:
+			print(f"[lidar] open failed {port}: {e}")
+			self.lidar_ser = None
+
+	def kick_lidar(self):
+		"""Pulse the serial DTR line to reset a sensor MCU that has gone
+		silent-but-busy (STL-19P on CP210x adapters where DTR = reset).
+		Safe when DTR is not wired: it just idles the line."""
+		print("[lidar] kicking sensor: DTR pulse")
+		try:
+			port = self._pick_lidar_port()
+			if self.lidar_ser is not None:
+				try:
+					self.lidar_ser.close()
+				except Exception:
+					pass
+				self.lidar_ser = None
+			if port:
+				s = serial.Serial(port, 230400, timeout=0.2, dsrdtr=False, rtscts=False)
+				try:
+					s.dtr = True
+					time.sleep(0.25)
+					s.dtr = False
+				except Exception:
+					pass
+				s.close()
+			time.sleep(1.0)   # give the sensor a moment to boot
+		except Exception as e:
+			print(f"[lidar] kick failed: {e}")
+		self.open_lidar_serial()
 
 	def readline(self):
 		i = self.buf.find(b"\n")

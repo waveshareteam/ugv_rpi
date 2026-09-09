@@ -1289,16 +1289,16 @@ def lidar_recv_loop():
     """
     import glob as _glob
     print("[lidar] LIDAR receive thread started")
+    # Watchdog: if the wire is alive but produces no valid frames for a while,
+    # the sensor MCU is likely stuck (CP210x DTR-reset boards) - pulse it once.
+    last_kick = 0.0
     while True:
         if base.rl.lidar_ser is None:
-            # Try to reconnect every 3 s
+            # Reconnect through the same port-picker as startup, so we never
+            # latch onto the silent base board while the USB adapter exists.
             try:
-                devs = _glob.glob('/dev/ttyACM*')
-                if devs:
-                    import serial as _serial
-                    base.rl.lidar_ser = _serial.Serial(devs[0], 230400, timeout=1)
-                    print(f"[lidar] Reconnected to {devs[0]}")
-                else:
+                base.rl.open_lidar_serial()
+                if base.rl.lidar_ser is None:
                     time.sleep(3)
                     continue
             except Exception as e:
@@ -1311,6 +1311,12 @@ def lidar_recv_loop():
             print(f"[lidar] recv error: {e}")
             base.rl.lidar_ser = None    # trigger reconnect
             time.sleep(1)
+            continue
+        # Wire-health watchdog (only after the rates have had time to settle).
+        if base.rl.rx_bps > 500 and base.rl.frames_per_s < 1 and time.time() - last_kick > 20:
+            print("[lidar] wire alive but 0 frames - kicking sensor")
+            last_kick = time.time()
+            base.rl.kick_lidar()
         time.sleep(0.01)                # yield; recv() already throttles by data
 
 
