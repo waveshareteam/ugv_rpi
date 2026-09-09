@@ -44,6 +44,7 @@ Available actions:
 - auto_drive params: {"on": true|false}  Follow-the-line auto mode on or off.
 - avoidance params: {"on": true|false}  LIDAR obstacle avoidance on or off.
 - gimbal    params: {"dir": "up|down|left|right"}  Tilt/pan the camera head.
+- detect    params: {}  Look through the camera and describe what you see in front of the robot.
 - status    params: {"what": "battery|lidar|all"}  Report robot state.
 - chat      params: {}  For greetings, thanks, jokes, or anything with no robot action.
 
@@ -254,6 +255,18 @@ def _gimbal(robot, params, say):
         return "I couldn't move the camera."
 
 
+def _detect(robot, params, say):
+    """Look through the camera and describe what's in front of the robot."""
+    try:
+        if not hasattr(robot, 'detect_scene'):
+            return "I don't have eyes yet, boss!"
+        description = robot.detect_scene()
+        return description
+    except Exception as e:
+        log.error("detect failed: %s", e)
+        return "Something went wrong with my eyes."
+
+
 ACTIONS = {
     "drive": _drive,
     "spin": _spin,
@@ -264,6 +277,7 @@ ACTIONS = {
     "auto_drive": _auto_drive,
     "avoidance": _avoidance,
     "gimbal": _gimbal,
+    "detect": _detect,
     "status": _status,
 }
 

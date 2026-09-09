@@ -167,6 +167,17 @@ class OpencvFuncs():
                             "dog", "horse", "motorbike", "person", "pottedplant", "sheep",
                             "sofa", "train", "tvmonitor"]
 
+        # YOLOv8 model for broader object detection (80 COCO classes)
+        self.yolo_model = None
+        self.last_detections = []  # Latest detection results for Lance to access
+        self.last_frame_for_detect = None  # Latest frame for on-demand detection
+        try:
+            from ultralytics import YOLO
+            self.yolo_model = YOLO('yolov8n.pt')  # nano model — fast on Pi
+            logging.info("YOLOv8 loaded successfully")
+        except Exception as e:
+            logging.warning("YOLOv8 not available, falling back to MobileNet: %s", e)
+
         # mediapipe
         self.mpDraw = mp.solutions.drawing_utils
 
@@ -289,6 +300,9 @@ class OpencvFuncs():
             ret, buffer = cv2.imencode('.jpg', input_frame, [int(cv2.IMWRITE_JPEG_QUALITY), self.video_quality])
             input_frame = buffer.tobytes()
             return input_frame
+
+        # Store latest raw frame for on-demand detection (detect_scene)
+        self._latest_raw_frame = input_frame
     
         # Reset overlay at the beginning of each frame
         self.overlay = np.zeros_like(input_frame)
@@ -574,12 +588,66 @@ class OpencvFuncs():
 
     def cv_detect_objects(self, img):
         overlay_buffer = np.zeros_like(img)
-        cv2.putText(overlay_buffer, 'Person Detect', (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
-        # Convert to RGB
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        (h, w) = img.shape[:2]
-        blob = cv2.dnn.blobFromImage(cv2.resize(img, (300, 300)), 0.007843, (300, 300), 127.5)
+        # Prefer YOLOv8 when available — 80 COCO classes, much better accuracy
+        if self.yolo_model is not None:
+            try:
+                results = self.yolo_model(img, verbose=False, conf=0.25)
+                objects = []
+                confidences = []
+                boxes = []
+                for r in results:
+                    for box in r.boxes:
+                        cls_id = int(box.cls[0])
+                        conf = float(box.conf[0])
+                        name = self.yolo_model.names.get(cls_id, f"class_{cls_id}")
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+
+                        # Color code: green for people, cyan for vehicles, yellow for animals, white for others
+                        if name == 'person':
+                            color = (0, 200, 0)
+                        elif name in ('car', 'truck', 'bus', 'motorcycle', 'bicycle'):
+                            color = (255, 200, 0)
+                        elif name in ('dog', 'cat', 'bird', 'horse', 'sheep', 'cow', 'bear'):
+                            color = (0, 255, 255)
+                        else:
+                            color = (200, 200, 200)
+
+                        cv2.rectangle(overlay_buffer, (x1, y1), (x2, y2), color, 2)
+                        label = f"{name} {conf:.0%}"
+                        y = y1 - 10 if y1 - 10 > 15 else y1 + 15
+                        cv2.putText(overlay_buffer, label, (x1, y),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                        objects.append(name)
+                        confidences.append(conf)
+                        boxes.append((x1, y1, x2, y2))
+
+                # Store latest detections for Lance voice queries
+                self.last_detections = [
+                    {'name': n, 'confidence': c, 'box': b}
+                    for n, c, b in zip(objects, confidences, boxes)
+                ]
+                # Summary line at top
+                if objects:
+                    from collections import Counter
+                    counts = Counter(objects)
+                    summary = ", ".join(f"{v} {k}" + ("s" if v > 1 else "") for k, v in counts.most_common(5))
+                    cv2.putText(overlay_buffer, summary, (10, 25),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 2)
+                else:
+                    cv2.putText(overlay_buffer, "No objects detected", (10, 25),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (120, 120, 120), 1)
+
+                self.overlay = overlay_buffer
+                return objects, confidences, boxes
+            except Exception as e:
+                logging.warning("YOLOv8 detection failed, falling back: %s", e)
+
+        # Fallback: old MobileNet Caffe model
+        cv2.putText(overlay_buffer, 'Person Detect', (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        (h, w) = img_rgb.shape[:2]
+        blob = cv2.dnn.blobFromImage(cv2.resize(img_rgb, (300, 300)), 0.007843, (300, 300), 127.5)
         self.net.setInput(blob)
         detections = self.net.forward()
 
@@ -595,24 +663,22 @@ class OpencvFuncs():
                 box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
                 (startX, startY, endX, endY) = box.astype("int")
 
-                # Add shoe detection
-                if self.class_names[idx] == "shoe":
-                    label = "Shoe: {:.2f}%".format(confidence * 100)
-                    cv2.rectangle(overlay_buffer, (startX, startY), (endX, endY), (0, 255, 255), 2)
-                else:
-                    label = "{}: {:.2f}%".format(self.class_names[idx], confidence * 100)
-                    cv2.rectangle(overlay_buffer, (startX, startY), (endX, endY), (0, 255, 0), 2)
+                label = "{}: {:.2f}%".format(self.class_names[idx], confidence * 100)
+                cv2.rectangle(overlay_buffer, (startX, startY), (endX, endY), (0, 255, 0), 2)
 
                 y = startY - 15 if startY - 15 > 15 else startY + 15
                 cv2.putText(overlay_buffer, label, (startX, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-                # Store detected object information
                 objects.append(self.class_names[idx])
                 confidences.append(confidence)
                 boxes.append((startX, startY, endX, endY))
 
+        self.last_detections = [
+            {'name': n, 'confidence': c, 'box': b}
+            for n, c, b in zip(objects, confidences, boxes)
+        ]
         self.overlay = overlay_buffer
-        return objects, confidences, boxes  # Ensure to return the detected objects
+        return objects, confidences, boxes
 
 
     def cv_detect_color(self, img):
@@ -1304,6 +1370,67 @@ class OpencvFuncs():
         except Exception as e:
             logging.error(f"lance_handle failed: {e}")
             return "Sorry boss, my brain is having a moment."
+
+    def detect_scene(self):
+        """Use the latest captured frame to run YOLOv8 detection.
+        Returns a human-readable summary string of what's in front of the camera.
+        """
+        frame = getattr(self, '_latest_raw_frame', None)
+        if frame is None:
+            return "I can't see anything right now — the camera isn't responding."
+
+        # Run YOLOv8 detection if available
+        if self.yolo_model is not None:
+            try:
+                results = self.yolo_model(frame, verbose=False, conf=0.3)
+                found = []
+                for r in results:
+                    for box in r.boxes:
+                        cls_id = int(box.cls[0])
+                        conf = float(box.conf[0])
+                        name = self.yolo_model.names.get(cls_id, f"class_{cls_id}")
+                        found.append((name, conf))
+
+                # Also store for later reference
+                self.last_detections = [
+                    {'name': n, 'confidence': c, 'box': list(map(int, box.xyxy[0]))}
+                    for r in results for box in r.boxes
+                    for n in [self.yolo_model.names.get(int(box.cls[0]), "unknown")]
+                    for c in [float(box.conf[0])]
+                ]
+
+                if not found:
+                    return "I don't see anything recognizable in front of the camera."
+
+                # Build a natural summary
+                from collections import Counter
+                counts = Counter(name for name, _ in found)
+                parts = []
+                for name, count in counts.most_common(10):
+                    if count == 1:
+                        parts.append(f"a {name}")
+                    else:
+                        parts.append(f"{count} {name}s")
+                summary = ", ".join(parts)
+                return f"I can see: {summary}."
+
+            except Exception as e:
+                logging.error("detect_scene YOLO error: %s", e)
+                return "My vision had a hiccup. Try again in a second."
+
+        # Fallback: MobileNet (20 classes)
+        try:
+            objects, confidences, boxes = self.cv_detect_objects(frame)
+            if not objects:
+                return "I don't see anything recognizable."
+            from collections import Counter
+            counts = Counter(objects)
+            parts = []
+            for name, count in counts.most_common(5):
+                parts.append(f"{count} {name}" if count > 1 else f"a {name}")
+            return f"I can see: {', '.join(parts)}."
+        except Exception as e:
+            return "My vision isn't working right now."
     
     def execute_command(self, command):
         logging.info(f"Executing command: {command}")
