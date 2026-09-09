@@ -160,10 +160,13 @@ class LidarAvoider:
         self._stop_evt.set()
         self._send(0.0, 0.0)
 
-    def pause(self):
-        """Yield control to manual driver."""
+    def pause(self, halt=False):
+        """Yield control to manual driver (halt=True also stops the wheels so
+        the ESP32 doesn't keep the last avoider speed)."""
         self._active = False
         self.state   = self.IDLE
+        if halt:
+            self._send(0.0, 0.0)
 
     def resume(self):
         """Re-enable automatic avoidance."""
@@ -258,20 +261,33 @@ class LidarAvoider:
         self.state = self.CRUISE
         self._send(CRUISE_SPD, CRUISE_SPD)
 
+    def _sleep_interruptible(self, seconds):
+        """Sleep in short slices, aborting early when paused or stopped."""
+        end = time.time() + seconds
+        while time.time() < end:
+            if not self._active or self._stop_evt.is_set():
+                return False
+            time.sleep(min(0.1, end - time.time()))
+        return True
+
     def _reverse_and_turn(self, bias, rear):
-        """Block the avoider loop: back up then spin away."""
+        """Back up then spin away; aborts (and halts) if paused or stopped."""
         # Phase 1: reverse (skip if rear is blocked)
         rev = REVERSE_SPD if rear > LIDAR_STOP_MM else 0.0
         if rev != 0.0:
             self._send(rev, rev)
-            time.sleep(REVERSE_SEC)
+            if not self._sleep_interruptible(REVERSE_SEC):
+                self._send(0.0, 0.0)
+                return
 
         # Phase 2: spin in place
         if bias > 0:   # turn left: right fwd, left back
             self._send( SLOW_SPD, -SLOW_SPD)
         else:          # turn right
             self._send(-SLOW_SPD,  SLOW_SPD)
-        time.sleep(TURN_SEC)
+        if not self._sleep_interruptible(TURN_SEC):
+            self._send(0.0, 0.0)
+            return
 
         self._send(0.0, 0.0)
         self._cooldown = time.time() + 0.3
@@ -871,12 +887,17 @@ def force_reboot():
 @app.route('/lidar_avoidance', methods=['POST'])
 def toggle_lidar_avoidance():
     """Enable or disable LIDAR obstacle avoidance from the UI."""
+    global _last_manual_cmd_time
     enable = request.form.get('enable', 'true').lower() == 'true'
     if enable:
         avoider.resume()
         msg = 'LIDAR avoidance enabled'
     else:
-        avoider.pause()
+        # Explicit disable: halt the wheels now (pause() alone leaves the last
+        # avoider speed on the ESP32) and clear the watchdog timestamp so the
+        # auto-resume never re-arms it until the user drives again.
+        avoider.pause(halt=True)
+        _last_manual_cmd_time = 0.0
         msg = 'LIDAR avoidance disabled'
     return jsonify({'status': 'success', 'message': msg,
                     'avoidance_active': avoider._active,
@@ -1496,7 +1517,9 @@ def cmdline_ctrl(args_string):
                 avoider.resume()
                 cvf.info_update("Avoidance ON", (0,255,0), 0.36)
             elif args[1] == 'off':
-                avoider.pause()
+                global _last_manual_cmd_time
+                avoider.pause(halt=True)
+                _last_manual_cmd_time = 0.0
                 cvf.info_update("Avoidance OFF", (0,128,255), 0.36)
 
     elif args[0] == 'test':
