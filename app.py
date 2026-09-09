@@ -69,7 +69,9 @@ MAX_TURN_BIAS   = 0.45
 # Timing
 REVERSE_SEC     = 0.6
 TURN_SEC        = 0.9
-MANUAL_PAUSE_SEC = 3.0  # seconds after last joystick input before avoider resumes
+MANUAL_PAUSE_SEC = 8.0  # seconds after last joystick input before avoider resumes
+                       # (3s was short enough that the avoider could re-engage
+                       # between two deliberate maneuvers and fight the next one)
 LOOP_HZ         = 10
 
 
