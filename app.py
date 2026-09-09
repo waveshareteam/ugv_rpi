@@ -879,11 +879,17 @@ def lidar_status():
     """Return current LIDAR avoidance state for UI polling."""
     hw_connected = (base.rl.lidar_ser is not None)
     enabled      = bool(f['base_config']['use_lidar'])
+    # "Port open" is not "sensor streaming" - a powered-off D500 still holds
+    # the port open.  Report the age of the last full revolution instead.
+    scan_age = (time.time() - getattr(base.rl, 'lidar_scan_time', 0.0)) if base.rl.lidar_scan_time > 0 else None
+    streaming = scan_age is not None and scan_age < 3.0
     return jsonify({
         'avoidance_active': avoider._active,
         'avoidance_state':  avoider.state,
         'use_lidar':        enabled,
         'hw_connected':     hw_connected,
+        'streaming':        streaming,
+        'scan_age_s':       scan_age if scan_age is not None else -1,
         # Tell the UI why things aren't working
         'status_msg': (
             'Active'               if enabled and hw_connected and avoider._active else
@@ -901,14 +907,17 @@ def lidar_points():
     distances in mm.  Returns empty lists when LIDAR is not connected.
     """
     try:
-        angles    = list(base.rl.lidar_angles_show)
+        angles = list(base.rl.lidar_angles_show)
         distances = list(base.rl.lidar_distances_show)
-        hw_ok     = (base.rl.lidar_ser is not None)
+        hw_ok = (base.rl.lidar_ser is not None)
+        streaming = getattr(base.rl, 'lidar_scan_time', 0.0) > 0 and \
+            (time.time() - base.rl.lidar_scan_time) < 3.0
         return jsonify({
-            'angles':       angles,
-            'distances':    distances,
+            'angles': angles,
+            'distances': distances,
             'hw_connected': hw_ok,
-            'use_lidar':    bool(f['base_config']['use_lidar'])
+            'streaming': streaming,
+            'use_lidar': bool(f['base_config']['use_lidar'])
         })
     except Exception as e:
         return jsonify({'angles': [], 'distances': [],
@@ -1177,6 +1186,7 @@ def handle_socket_json(data):
                       f"{keyL}={L} {keyR}={R} -> {round(Lc, 3)} {round(Rc, 3)}")
             data[keyL] = round(Lc, 3)
             data[keyR] = round(Rc, 3)
+            print(f"[drive] recv {keyL}={data[keyL]} {keyR}={data[keyR]}")
             if Lc != 0 or Rc != 0:
                 # User is actively driving – hand control over
                 avoider.pause()
@@ -1305,8 +1315,10 @@ def manual_control_watchdog():
 @socketio.on('message', namespace='/ctrl')
 def handle_socket_cmd(message):
     try:
-        json_data = json.loads(message)
-    except json.JSONDecodeError:
+        # Accept both a JSON string (browser socket.io.js emits) and a
+        # native dict (raw socket.io clients) — a dict crashed this handler.
+        json_data = json.loads(message) if isinstance(message, (str, bytes, bytearray)) else message
+    except (json.JSONDecodeError, TypeError):
         print("Error decoding JSON.[app.handle_socket_cmd]")
         return
     cmd_a = float(json_data.get("A", 0))

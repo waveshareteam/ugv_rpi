@@ -72,7 +72,19 @@ public class RobotState : System.ComponentModel.INotifyPropertyChanged
     public string LidarSummary = "no data";
     bool _lidarHw;
     public bool LidarHw { get => _lidarHw; set { _lidarHw = value; Raise(nameof(LidarHwText)); } }
-    public string LidarHwText => LidarHw ? "LIDAR: connected" : "LIDAR: no stream (check power/cable)";
+    bool _lidarStreaming;
+    public bool LidarStreaming
+    {
+        get => _lidarStreaming;
+        set { _lidarStreaming = value; Raise(nameof(LidarHwText)); Raise(nameof(LidarHwBrush)); }
+    }
+    public string LidarHwText =>
+        LidarStreaming ? "LIDAR: streaming" :
+        LidarHw ? "LIDAR: port open, no data (check power/cable)" :
+        "LIDAR: not connected";
+    public System.Windows.Media.Brush LidarHwBrush => LidarStreaming
+        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4F, 0xF5, 0xC0))
+        : System.Windows.Media.Brushes.Orange;
 
     // ── cameras ──
     public System.Collections.Generic.List<CameraInfo> Cameras = new();

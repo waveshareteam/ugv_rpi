@@ -35,6 +35,13 @@ public partial class DrivePanel : UserControl
             robot.State.SpeedScale = SpeedSlider.Value;
         };
 
+        // label follows actual state (flipped only after the REST round-trip succeeds)
+        robot.State.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(RobotState.LightsText))
+                Dispatcher.Invoke(() => LightsBtn.Content = robot.State.LightsText);
+        };
+
         // keyboard driving loop — sends a repeated hold frame while keys are down
         _keyTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
         _keyTimer.Tick += (_, _) => SendKeyDrive();
@@ -118,8 +125,7 @@ public partial class DrivePanel : UserControl
     // ── buttons ──
     void OnLights(object sender, RoutedEventArgs e)
     {
-        _robot.LightsToggle();          // REST /toggle_lights; state flips on success
-        LightsBtn.Content = _robot.State.LightsText;
+        _robot.LightsToggle();          // REST /toggle_lights; label updates on success via PropertyChanged
     }
 
     async void OnAutoDrive(object sender, RoutedEventArgs e)

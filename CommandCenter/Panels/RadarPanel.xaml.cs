@@ -42,7 +42,7 @@ public partial class RadarPanel : UserControl
         AvoidState.Foreground = s.AvoidBrush;
         AvoidBtn.Content = s.AvoidActive ? "Disable Avoidance" : "Enable Avoidance";
         HwState.Text = s.LidarHwText;
-        HwState.Foreground = s.LidarHw ? Brushes.MediumSpringGreen : Brushes.Orange;
+        HwState.Foreground = s.LidarHwBrush;
     }
 
     async void OnAvoidToggle(object sender, RoutedEventArgs e)

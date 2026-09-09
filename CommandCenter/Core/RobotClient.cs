@@ -177,17 +177,47 @@ public sealed class RobotClient : IAsyncDisposable
     void SendJson(object payload) => Json.Emit("json", payload);
 
     double _lastL = double.NaN, _lastR = double.NaN;
+    DateTime _lastSentTime = DateTime.MinValue;
+    bool _lastWasDriving;
+    int _burstGen;
 
     /// <summary>Drive with per-wheel values in the web-app convention (-max..max). L=left track speed, R=right.
-    /// Identical consecutive frames are suppressed so hold-loops don't flood the WiFi link.</summary>
+    /// Identical non-zero frames are suppressed so hold-loops don't flood the WiFi link, but identical
+    /// frames still re-send at 1 Hz while Drive() keeps being called.  Zero frames are NEVER suppressed
+    /// (a deduped stop is exactly the lost-frame case that leaves the robot latched driving), and every
+    /// driving->stopped transition fires a short stop burst so one dropped packet can't leave motion live.</summary>
     public void Drive(double l, double r)
     {
         l = Math.Round(l, 3); r = Math.Round(r, 3);
-        if (l == _lastL && r == _lastR) { CommandSent?.Invoke(l, r); return; }
+        bool isStop = l == 0 && r == 0;
+        bool identical = l == _lastL && r == _lastR;
+        bool dueKeepalive = (DateTime.UtcNow - _lastSentTime).TotalMilliseconds >= 1000;
+        if (!isStop && identical && !dueKeepalive) { CommandSent?.Invoke(l, r); return; }
         _lastL = l; _lastR = r;
+        _lastSentTime = DateTime.UtcNow;
+        System.Threading.Interlocked.Increment(ref _burstGen); // cancel pending stop bursts
         SendJson(new { T = State.CmdMotion, L = l, R = r });
-        WasDriving = Math.Abs(l) > 0.001 || Math.Abs(r) > 0.001;
+        WasDriving = !isStop;
         CommandSent?.Invoke(l, r);
+        if (isStop && _lastWasDriving)
+        {
+            // Stop burst: the server latches the last command, so repeat the
+            // stop a few times to survive a dropped packet on the WiFi link.
+            // A new drive command bumps the generation, cancelling the burst
+            // so a queued stop can never brake a fresh forward press.
+            int gen = System.Threading.Interlocked.Increment(ref _burstGen);
+            for (int i = 1; i <= 3; i++)
+            {
+                int delay = 150 * i;
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(delay);
+                    if (System.Threading.Volatile.Read(ref _burstGen) == gen)
+                        SendJson(new { T = State.CmdMotion, L = 0.0, R = 0.0 });
+                });
+            }
+        }
+        _lastWasDriving = !isStop;
     }
 
     /// <summary>Gimbal relative move in stick pixels (mirrors control.js: X=dx/2.5, Y=-dy/2.5).</summary>
@@ -216,6 +246,7 @@ public sealed class RobotClient : IAsyncDisposable
                     var st = await GetJsonAsync("/lidar_status");
                     State.AvoidActive = st.GetProperty("avoidance_active").GetBoolean();
                     State.LidarHw = st.GetProperty("hw_connected").GetBoolean();
+                    State.LidarStreaming = st.GetProperty("streaming").GetBoolean();
                 }
                 catch { }
             }

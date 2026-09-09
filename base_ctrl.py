@@ -38,6 +38,7 @@ class ReadLine:
 		self.lidar_distances = []
 		self.lidar_angles_show = []
 		self.lidar_distances_show = []
+		self.lidar_scan_time = 0.0
 		self.last_start_angle = 0
 
 	def readline(self):
@@ -121,6 +122,9 @@ class ReadLine:
 			self.last_start_angle = start_angle
 			self.lidar_angles_show = self.lidar_angles.copy()
 			self.lidar_distances_show = self.lidar_distances.copy()
+			# One full revolution was just published - stamp it so the UI can
+			# tell "sensor streaming" apart from "port open but silent".
+			self.lidar_scan_time = time.time()
 			self.lidar_angles.clear()
 			self.lidar_distances.clear()
 		except Exception as e:
