@@ -1289,9 +1289,12 @@ def lidar_recv_loop():
     """
     import glob as _glob
     print("[lidar] LIDAR receive thread started")
-    # Watchdog: if the wire is alive but produces no valid frames for a while,
-    # the sensor MCU is likely stuck (CP210x DTR-reset boards) - pulse it once.
+    # Watchdogs: (a) wire alive but no valid frames for a while -> the sensor
+    # MCU is likely stuck (CP210x DTR-reset boards) - pulse it once; (b) wire
+    # totally silent on a port that may have re-enumerated (ttyUSB0->ttyUSB1)
+    # -> reopen so we re-glob and follow the device to its new node.
     last_kick = 0.0
+    last_reopen = 0.0
     while True:
         if base.rl.lidar_ser is None:
             # Reconnect through the same port-picker as startup, so we never
@@ -1312,10 +1315,17 @@ def lidar_recv_loop():
             base.rl.lidar_ser = None    # trigger reconnect
             time.sleep(1)
             continue
-        # Wire-health watchdog (only after the rates have had time to settle).
-        if base.rl.rx_bps > 500 and base.rl.frames_per_s < 1 and time.time() - last_kick > 20:
+        now = time.time()
+        # (b) silent wire for >10 s on a still-open port: reopen (re-globs,
+        # follows a device that re-enumerated to a new /dev/ttyUSBn).
+        if base.rl.rx_bps < 10 and now - last_reopen > 10:
+            print("[lidar] wire silent 10s - reopening port")
+            last_reopen = now
+            base.rl.open_lidar_serial()
+        # (a) alive-but-garbage: kick the sensor's MCU via DTR pulse.
+        elif base.rl.rx_bps > 500 and base.rl.frames_per_s < 1 and now - last_kick > 20:
             print("[lidar] wire alive but 0 frames - kicking sensor")
-            last_kick = time.time()
+            last_kick = now
             base.rl.kick_lidar()
         time.sleep(0.01)                # yield; recv() already throttles by data
 

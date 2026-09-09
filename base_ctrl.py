@@ -21,8 +21,16 @@ class ReadLine:
 		self.sensor_data = []
 		self.sensor_list = []
 		try:
-			self.sensor_data_ser = serial.Serial(glob.glob('/dev/ttyUSB*')[0], 115200)
-			print("/dev/ttyUSB* connected succeed")
+			# Ultrasonic sensor (if any) lives on a ttyUSB that is NOT the lidar
+			# adapter.  When the D500 kit's CP2102 is the only ttyUSB, skip this
+			# entirely so we never contend with the lidar reader on the same port.
+			lidar_port = self._pick_lidar_port()
+			others = [p for p in glob.glob('/dev/ttyUSB*') if p != lidar_port]
+			if others:
+				self.sensor_data_ser = serial.Serial(others[0], 115200)
+				print("/dev/ttyUSB* connected succeed")
+			else:
+				self.sensor_data_ser = None
 		except:
 			self.sensor_data_ser = None
 		self.sensor_data_max_len = 51
@@ -60,11 +68,16 @@ class ReadLine:
 		acm = sorted(glob.glob('/dev/ttyACM*'))
 		return usb[0] if usb else (acm[0] if acm else None)
 
+	def _pick_lidar_baud(self, port):
+		"""Direct CP2102 adapter (ttyUSB*) carries the D500's native stream at
+		921600 baud; the ESP32 base board (ttyACM*) relays it at 230400."""
+		return 921600 if port.startswith('/dev/ttyUSB') else 230400
+
 	def open_lidar_serial(self):
 		"""(Re)open the lidar serial port on the best available device.
-		De-asserts DTR/RTS: CP210x adapters can route those lines to the
-		sensor's reset/PWM, and pyserial asserts them on open by default,
-		which can hold the STL-19P in a dead state."""
+		DTR/RTS are left asserted: on the D500 kit's CP2102 adapter the DTR
+		line drives the sensor's motor PWM, so a de-asserted DTR can stop
+		the motor and starve the stream."""
 		port = self._pick_lidar_port()
 		if port is None:
 			print("[lidar] no serial device for lidar")
@@ -77,16 +90,17 @@ class ReadLine:
 				except Exception:
 					pass
 				self.lidar_ser = None
-			s = serial.Serial(port, 230400, timeout=1, dsrdtr=False, rtscts=False)
+			baud = self._pick_lidar_baud(port)
+			s = serial.Serial(port, baud, timeout=1, dsrdtr=False, rtscts=False)
 			try:
-				s.dtr = False
-				s.rts = False
+				s.dtr = True
+				s.rts = True
 			except Exception:
 				pass
 			self.lidar_ser = s
 			self.last_start_angle = 0
 			self._lbuf.clear()
-			print(f"lidar serial connected succeed on {port}")
+			print(f"lidar serial connected succeed on {port} @ {baud}")
 		except Exception as e:
 			print(f"[lidar] open failed {port}: {e}")
 			self.lidar_ser = None
@@ -105,7 +119,7 @@ class ReadLine:
 					pass
 				self.lidar_ser = None
 			if port:
-				s = serial.Serial(port, 230400, timeout=0.2, dsrdtr=False, rtscts=False)
+				s = serial.Serial(port, self._pick_lidar_baud(port), timeout=0.2, dsrdtr=False, rtscts=False)
 				try:
 					s.dtr = True
 					time.sleep(0.25)

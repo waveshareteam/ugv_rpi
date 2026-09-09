@@ -17,18 +17,30 @@
   "USB Camera" (video0/1, spare — captured a 614400-byte raw frame via v4l2-ctl).
   Only one camera is used by app.py at a time (first found, here video2).
 
-## LIDAR D500 — RESOLVED to a wiring-quality issue (Sep 9, evening)
-After the user re-plugged the sensor's USB adapter, the D500 now enumerates as its
-own CP210x bridge (/dev/ttyUSB*, NOT ttyACM* — base_ctrl.py now prefers ttyUSB*).
-Data DOES flow and the full pipeline works: revolutions parse, /lidar_points serves
-real distances (0.28m close object, 1.6-1.7m walls), the radar fills in.
-REMAINING DEFECT (hardware): the stream is ~98% corrupted — full revolutions land
-only every ~2-12s instead of 10Hz, with only 12-24 valid points per scan (of ~400).
-The wire carries high-entropy garbage at exactly 230400-line-utilization levels,
-no valid frame headers for long stretches => classic half-seated ZH1.5T 4-pin
-connector / mis-wired Tx-vs-PWM symptom. Re-seat the 4-pin cable firmly (or swap
-it) and the radar should go dense and smooth instantly — no software change left
-beyond what is already deployed.
+## LIDAR D500 — RESOLVED: wrong baud, not hardware (Sep 9, late)
+The D500 (STL-19P core) connected directly through its CP2102 adapter emits its
+native stream at **921600 baud** — NOT the 230400 the vendor code (and every
+earlier diagnosis) assumed. Reading a 921600 stream at 230400 yields exactly the
+"saturated high-entropy garbage with zero 54 2C headers" signature that was
+misdiagnosed as a half-seated ZH1.5T cable for most of the session.
+
+Proof chain: multi-baud sweep on /dev/ttyUSB1 showed 639 `54 2C` headers in
+30KB only at 921600; offline validation: 499/500 CRC8-valid 47-byte frames,
+motor 3551 RPM, real distances 0-2098mm. The cable was fine all along.
+
+FIX (base_ctrl.py): `_pick_lidar_baud(port)` returns 921600 for /dev/ttyUSB*
+(direct CP2102 adapter) and 230400 for /dev/ttyACM* (ESP32 base-board relay).
+DTR/RTS are asserted on open (the adapter drives the sensor's motor PWM via DTR;
+asserted = motor runs at full speed; a floating PWM pin = internal 10Hz control).
+Also: the ultrasonic `sensor_data_ser` no longer grabs the lidar's ttyUSB port.
+
+VERIFIED LIVE: streaming true, ~1800 frames/s, full revolutions every ~0.1s,
+/lidar_points serves 360/360 1-degree bins, WPF Radar tab reads "streaming
+(1800 frames/s)", 356 pts, nearest 0.43m, avoidance ACTIVE and reacting.
+
+KEY LESSON: never conclude hardware without sweeping the baud. Undersampling a
+921600 stream at 230400 looks like saturated noise at the *right-looking* data
+rate — the exact trap this session fell into.
 
 ## Operational gotchas learned the hard way
 1. **WiFi flakiness is environmental.** The robot dropped off the network twice in one
