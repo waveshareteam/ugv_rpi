@@ -19,6 +19,7 @@ public partial class MainWindow : Window
         RadarTab.Init(_robot);
         CamerasTab.Init(_robot);
         LearningTab.Init(_robot);
+        ChatTab.Init(_robot);
 
         _robot.State.PropertyChanged += (_, e) =>
         {

@@ -72,6 +72,22 @@ public sealed class RobotClient : IAsyncDisposable
     public Task<JsonElement> RetryCameraAsync() => PostFormAsync("/retry_camera", new Dictionary<string, string>());
     public Task<JsonElement> SetAvoidanceAsync(bool on) => PostFormAsync("/lidar_avoidance", new() { ["enable"] = on ? "true" : "false" });
 
+    // Ollama inference takes seconds (and can be slow on first call), so Lance
+    // gets its own client instead of the 6s default used for telemetry.
+    readonly HttpClient _lanceHttp = new() { Timeout = TimeSpan.FromSeconds(120) };
+
+    public async Task<string> LanceAsync(string question)
+    {
+        using var content = new StringContent(
+            JsonSerializer.Serialize(new { question }),
+            System.Text.Encoding.UTF8, "application/json");
+        var resp = await _lanceHttp.PostAsync(State.BaseUrl + "/api/lance", content, _cts.Token);
+        resp.EnsureSuccessStatusCode();
+        await using var s = await resp.Content.ReadAsStreamAsync(_cts.Token);
+        using var doc = await JsonDocument.ParseAsync(s, cancellationToken: _cts.Token);
+        return doc.RootElement.GetProperty("reply").GetString() ?? "";
+    }
+
     /// <summary>Grab the most recent video frame as JPEG bytes (falls back to pulling one from the stream).</summary>
     public async Task<byte[]> SnapshotJpegAsync()
     {

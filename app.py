@@ -903,6 +903,22 @@ def toggle_lidar_avoidance():
                     'avoidance_active': avoider._active,
                     'avoidance_state':  avoider.state})
 
+@app.route('/api/lance', methods=['POST'])
+def api_lance():
+    """Text chat with Lance (local Ollama brain) from the Command Center.
+    Executes robot actions the same way the voice loop does."""
+    try:
+        data = request.get_json(silent=True) or {}
+        question = (data.get('question') or '').strip()
+        if not question:
+            return jsonify({'status': 'error', 'reply': 'Say something to Lance.'}), 400
+        reply = cvf.lance_handle(question)
+        return jsonify({'status': 'success', 'reply': reply, 'question': question})
+    except Exception as e:
+        logging.error("Lance API error: %s", e)
+        return jsonify({'status': 'error', 'reply': f"Lance hit an error: {e}"}), 500
+
+
 @app.route('/lidar_status', methods=['GET'])
 def lidar_status():
     """Return current LIDAR avoidance state for UI polling."""

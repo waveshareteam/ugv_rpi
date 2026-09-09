@@ -28,6 +28,7 @@
             <TabItem Header="📡 Radar"><p:RadarPanel x:Name="RadarTab"/></TabItem>
             <TabItem Header="📷 Cameras"><p:CamerasPanel x:Name="CamerasTab"/></TabItem>
             <TabItem Header="🧠 Learning"><p:LearningPanel x:Name="LearningTab"/></TabItem>
+            <TabItem Header="💬 Lance"><p:ChatPanel x:Name="ChatTab"/></TabItem>
         </TabControl>
     </DockPanel>
 </Window>

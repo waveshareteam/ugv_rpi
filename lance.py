@@ -268,7 +268,16 @@ ACTIONS = {
 }
 
 
+_LOCK = threading.Lock()  # serialize voice-loop + Command Center chat requests
+
+
 def handle(text, robot):
+    """Serialize Lance requests (voice loop and the chat UI share the robot)."""
+    with _LOCK:
+        return _handle(text, robot)
+
+
+def _handle(text, robot):
     """Full cycle: ensure Ollama, parse `text` into an action, execute it.
 
     Returns the spoken reply string (the caller voices it).
