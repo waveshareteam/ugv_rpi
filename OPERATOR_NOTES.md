@@ -17,17 +17,18 @@
   "USB Camera" (video0/1, spare — captured a 614400-byte raw frame via v4l2-ctl).
   Only one camera is used by app.py at a time (first found, here video2).
 
-## LIDAR D500 — hardware diagnosis (Sep 9, definitively not software)
-The web UI and server are correct and complete; the sensor produces no data:
-- It does NOT enumerate as its own USB serial device (no CP2102/CH340/FTDI in lsusb;
-  kernel log shows only the ESP32 base board's CDC port /dev/ttyACM0, Arduino VID).
-- /dev/ttyACM0 is exclusively the lidar port in this vendor stack (motors live on
-  /dev/ttyAMA0 GPIO UART); the app holds it open, but ZERO bytes arrive — verified
-  by freezing the app (SIGSTOP), reading raw at 115200 and 230400 baud, and sending
-  LDROBOT start-scan commands (5A 05 00 01 60) — all silent. GPIO UARTs also silent.
-=> Check the D500's 5V supply and the cable from sensor to the base board's lidar
-   UART header. The moment data flows, the radar on the page fills in by itself
-   (polling is already live); no software change is needed.
+## LIDAR D500 — RESOLVED to a wiring-quality issue (Sep 9, evening)
+After the user re-plugged the sensor's USB adapter, the D500 now enumerates as its
+own CP210x bridge (/dev/ttyUSB*, NOT ttyACM* — base_ctrl.py now prefers ttyUSB*).
+Data DOES flow and the full pipeline works: revolutions parse, /lidar_points serves
+real distances (0.28m close object, 1.6-1.7m walls), the radar fills in.
+REMAINING DEFECT (hardware): the stream is ~98% corrupted — full revolutions land
+only every ~2-12s instead of 10Hz, with only 12-24 valid points per scan (of ~400).
+The wire carries high-entropy garbage at exactly 230400-line-utilization levels,
+no valid frame headers for long stretches => classic half-seated ZH1.5T 4-pin
+connector / mis-wired Tx-vs-PWM symptom. Re-seat the 4-pin cable firmly (or swap
+it) and the radar should go dense and smooth instantly — no software change left
+beyond what is already deployed.
 
 ## Operational gotchas learned the hard way
 1. **WiFi flakiness is environmental.** The robot dropped off the network twice in one

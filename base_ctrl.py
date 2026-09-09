@@ -28,8 +28,17 @@ class ReadLine:
 		self.sensor_data_max_len = 51
 
 		try:
-			self.lidar_ser = serial.Serial(glob.glob('/dev/ttyACM*')[0], 230400, timeout=1)
-			print("/dev/ttyACM* connected succeed")
+			# The D500 lidar enumerates as its own CP210x USB-serial bridge
+			# (/dev/ttyUSB*) when powered via USB; prefer it over the ESP32
+			# base board's CDC port (/dev/ttyACM*) so we never read the wrong
+			# device. Fall back to ttyACM* for UART-wired kits.
+			usb = sorted(glob.glob('/dev/ttyUSB*'))
+			acm = sorted(glob.glob('/dev/ttyACM*'))
+			port = usb[0] if usb else (acm[0] if acm else None)
+			if port is None:
+				raise IOError('no serial device for lidar')
+			self.lidar_ser = serial.Serial(port, 230400, timeout=1)
+			print(f"lidar serial connected succeed on {port}")
 		except:
 			self.lidar_ser = None
 		self.ANGLE_PER_FRAME = 12
@@ -129,7 +138,14 @@ class ReadLine:
 			self.lidar_distances.clear()
 		except Exception as e:
 			print(f"[base_ctrl.lidar_data_recv] error: {e}")
-			self.lidar_ser = serial.Serial(glob.glob('/dev/ttyACM*')[0], 230400, timeout=1)
+			try:
+				usb = sorted(glob.glob('/dev/ttyUSB*'))
+				acm = sorted(glob.glob('/dev/ttyACM*'))
+				port = usb[0] if usb else (acm[0] if acm else None)
+				if port:
+					self.lidar_ser = serial.Serial(port, 230400, timeout=1)
+			except Exception:
+				self.lidar_ser = None
 
 
 class BaseController:
