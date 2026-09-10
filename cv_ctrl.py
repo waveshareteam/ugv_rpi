@@ -137,7 +137,82 @@ DEFAULT_KNOWN_OBJECTS = [
     "wine bottle", "soda bottle", "coconut", "cherries", "melon", "chili pepper",
     "pickle", "olive",
 ]
-    
+
+# Confidence bar for open-vocabulary detection. YOLO-World scores run cooler than
+# closed-set COCO, but 0.15 over-reports (e.g. "sim card" for a phone); 0.30 keeps
+# real objects while cutting most of the noise.
+WORLD_DETECT_CONF = 0.30
+
+# Near-duplicate vocabulary entries: when both fire on the same object, report
+# them under one canonical name (e.g. "monitor" + "screen" -> "monitor").
+SYNONYM_GROUPS = {
+    "monitor": ["screen", "display"],
+    "tv": ["television"],
+    "laptop": ["notebook"],
+    "cell phone": ["smartphone", "mobile phone", "iphone"],
+    "mug": ["coffee mug", "coffee cup"],
+    "couch": ["sofa", "loveseat"],
+    "bookshelf": ["bookcase"],
+    "plant": ["potted plant", "houseplant"],
+    "remote": ["remote control", "tv remote"],
+    "bottle": ["water bottle"],
+    "pan": ["frying pan", "skillet"],
+    "headphones": ["headset", "earbuds", "earphones"],
+    "clock": ["wall clock"],
+    "speaker": ["smart speaker"],
+}
+_SYNONYM_ALIAS_MAP = {alias: canon for canon, aliases in SYNONYM_GROUPS.items() for alias in aliases}
+
+_IRREGULAR_PLURALS = {
+    "person": "people", "mouse": "mice", "child": "children", "foot": "feet",
+    "tooth": "teeth", "man": "men", "woman": "women", "goose": "geese",
+    "die": "dice", "cactus": "cacti", "knife": "knives", "leaf": "leaves",
+    "shelf": "shelves", "half": "halves", "life": "lives", "loaf": "loaves",
+    "tomato": "tomatoes", "potato": "potatoes",
+}
+
+# Nouns already plural (never add an s):
+_PLURAL_ONLY = {"goggles", "scissors", "pants", "glasses", "sunglasses",
+                 "trousers", "pliers", "jeans", "shorts", "binoculars",
+                 "headphones", "earbuds"}
+
+
+def _pluralize(word):
+    """Pluralize a count noun: 'juice box' -> 'juice boxes', 'berry' -> 'berries'."""
+    w = word.strip().lower()
+    if w in _IRREGULAR_PLURALS:
+        return _IRREGULAR_PLURALS[w]
+    if w in _PLURAL_ONLY:
+        return w
+    if w.endswith(("s", "x", "z", "ch", "sh")):
+        return w + "es"
+    if w.endswith("y") and len(w) > 1 and w[-2] not in "aeiou":
+        return w[:-1] + "ies"
+    if w.endswith("fe"):
+        return w[:-2] + "ves"
+    if w.endswith("f"):
+        return w[:-1] + "ves"
+    return w + "s"
+
+
+def _article(word):
+    """'a' vs 'an' for a singular noun ('an egg', 'a laptop')."""
+    return "an" if word.strip().lower()[:1] in "aeiou" else "a"
+
+
+def _iou(a, b):
+    """Intersection-over-union of two [x1, y1, x2, y2] boxes."""
+    ix1, iy1 = max(a[0], b[0]), max(a[1], b[1])
+    ix2, iy2 = min(a[2], b[2]), min(a[3], b[3])
+    iw, ih = max(0, ix2 - ix1), max(0, iy2 - iy1)
+    inter = iw * ih
+    if inter == 0:
+        return 0.0
+    a_area = (a[2] - a[0]) * (a[3] - a[1])
+    b_area = (b[2] - b[0]) * (b[3] - b[1])
+    return inter / (a_area + b_area - inter)
+
+
 # Configure logging
 logging.basicConfig(filename='Log.txt', 
                     level=logging.INFO, 
@@ -1684,6 +1759,43 @@ class OpencvFuncs():
             return "Learned! A " + name + " — " + fact + " I'll recognize it from now on."
         return "Learned! From now on I'll recognize a " + name + "."
 
+    def _merge_synonym_boxes(self, found):
+        """Map detected names to canonical forms and merge overlapping boxes.
+
+        found: list of (name, conf, [x1,y1,x2,y2]). Returns the same list with
+        synonyms collapsed (monitor + screen on the same object -> one monitor)
+        and, per canonical class, overlapping boxes merged (keep highest conf).
+        """
+        groups = {}
+        for name, conf, box in found:
+            groups.setdefault(_SYNONYM_ALIAS_MAP.get(name, name), []).append((name, conf, box))
+        merged = []
+        for canon, dets in groups.items():
+            dets.sort(key=lambda d: d[1], reverse=True)
+            kept = []
+            for det in dets:
+                if all(_iou(det[2], k[2]) < 0.35 for k in kept):
+                    kept.append(det)
+            merged.extend((canon, conf, box) for _, conf, box in kept)
+        return merged
+
+    def _build_scene_summary(self, found):
+        """Turn raw detections into a spoken summary: synonyms deduped, overlapping
+        boxes merged, counts pluralized ('2 juice boxes'). Returns (top_name, text)."""
+        merged = self._merge_synonym_boxes(found)
+        if not merged:
+            return None, "I don't see anything I recognize right now."
+        from collections import Counter
+        counts = Counter(name for name, _, _ in merged)
+        parts = []
+        for name, count in counts.most_common(10):
+            if count == 1:
+                # plural-only nouns ('scissors') take no article
+                parts.append(name if name in _PLURAL_ONLY else f"{_article(name)} {name}")
+            else:
+                parts.append(f"{count} {_pluralize(name)}")
+        return counts.most_common(1)[0][0], ", ".join(parts)
+
     def detect_scene(self):
         """Use the latest captured frame to run open-vocabulary detection.
         Returns a human-readable summary string of what's in front of the camera.
@@ -1693,48 +1805,37 @@ class OpencvFuncs():
             return "I can't see anything right now — the camera isn't responding."
 
         # Open-vocabulary YOLO-World: COCO-80 + every learned/taught object.
-        # Uses a lower confidence bar since open-vocabulary scores run cooler.
+        # Confidence bar is WORLD_DETECT_CONF (0.30) — high enough to cut noise
+        # ("sim card" for a phone), low enough to keep real objects.
         if self.world_model is not None and getattr(self, 'world_ready', False):
             try:
-                results = self.world_model(frame, verbose=False, conf=0.15)
+                results = self.world_model(frame, verbose=False, conf=WORLD_DETECT_CONF)
                 found = []
                 for r in results:
                     for box in r.boxes:
                         cls_id = int(box.cls[0])
                         conf = float(box.conf[0])
                         name = self.world_model.names.get(cls_id, f"class_{cls_id}")
-                        found.append((name, conf))
+                        found.append((name, conf, list(map(int, box.xyxy[0]))))
 
                 self.last_detections = [
-                    {'name': n, 'confidence': c, 'box': list(map(int, box.xyxy[0]))}
-                    for r in results for box in r.boxes
-                    for n in [self.world_model.names.get(int(box.cls[0]), "unknown")]
-                    for c in [float(box.conf[0])]
+                    {'name': _SYNONYM_ALIAS_MAP.get(n, n), 'confidence': c, 'box': b}
+                    for n, c, b in found
                 ]
 
-                if not found:
-                    return "I don't see anything I recognize right now."
-
-                from collections import Counter
-                counts = Counter(name for name, _ in found)
-                top = counts.most_common(10)
-                parts = []
-                for name, count in top:
-                    if count == 1:
-                        parts.append(f"a {name}")
-                    else:
-                        parts.append(f"{count} {name}s")
-                summary = ", ".join(parts)
+                top_name, summary = self._build_scene_summary(found)
+                if top_name is None:
+                    return summary
                 # Attach a cached internet fact about the main object, if we have one
                 fact = ''
-                if top and top[0][0] in self.object_facts:
-                    fact = ' ' + self.object_facts[top[0][0]]
+                if top_name in self.object_facts:
+                    fact = ' ' + self.object_facts[top_name]
                 return f"I can see: {summary}.{fact}"
 
             except Exception as e:
                 logging.error("world detect error, falling back: %s", e)
 
-        # Run YOLOv8 COCO detection if available
+        # Run YOLOv8 COCO detection if available (closed-set fallback)
         if self.yolo_model is not None:
             try:
                 results = self.yolo_model(frame, verbose=False, conf=0.3)
@@ -1744,29 +1845,17 @@ class OpencvFuncs():
                         cls_id = int(box.cls[0])
                         conf = float(box.conf[0])
                         name = self.yolo_model.names.get(cls_id, f"class_{cls_id}")
-                        found.append((name, conf))
+                        found.append((name, conf, list(map(int, box.xyxy[0]))))
 
-                # Also store for later reference
+                # Also store for later reference (names canonicalized)
                 self.last_detections = [
-                    {'name': n, 'confidence': c, 'box': list(map(int, box.xyxy[0]))}
-                    for r in results for box in r.boxes
-                    for n in [self.yolo_model.names.get(int(box.cls[0]), "unknown")]
-                    for c in [float(box.conf[0])]
+                    {'name': _SYNONYM_ALIAS_MAP.get(n, n), 'confidence': c, 'box': b}
+                    for n, c, b in found
                 ]
 
-                if not found:
+                top_name, summary = self._build_scene_summary(found)
+                if top_name is None:
                     return "I don't see anything recognizable in front of the camera."
-
-                # Build a natural summary
-                from collections import Counter
-                counts = Counter(name for name, _ in found)
-                parts = []
-                for name, count in counts.most_common(10):
-                    if count == 1:
-                        parts.append(f"a {name}")
-                    else:
-                        parts.append(f"{count} {name}s")
-                summary = ", ".join(parts)
                 return f"I can see: {summary}."
 
             except Exception as e:
