@@ -26,15 +26,17 @@ This guide wires **two SPI TFT displays** (one per "eye") to an **Arduino Uno**,
 
 ## 2. Wiring — Arduino Uno → both TFTs
 
-Both displays share the Uno's SPI bus (**SCK + MOSI** are common). Each display gets its **own CS, DC, and RESET** pin so the Uno can talk to them one at a time. Power (VCC/LED) and GND are common.
+The two displays are **fully independent** — **no signal wires are shared**. The left eye runs on the Uno's hardware SPI (SCK=D13, MOSI=D11) with its own CS/DC/RST; the right eye runs on a second, software-driven SPI port (SCLK=D4, MOSI=D3) with its own CS/DC/RST. Each display gets five dedicated signal wires. Only power (VCC/LED) and GND are common (you can separate those too if you prefer).
 
 | Signal | Uno pin | TFT #1 (LEFT eye) | TFT #2 (RIGHT eye) |
 |---|---|---|---|
 | Power (logic) | **3.3 V** | `VCC` | `VCC` |
 | Power (backlight) | **3.3 V** | `LED` | `LED` |
 | Ground | **GND** | `GND` | `GND` |
-| SPI clock | **D13 (SCK)** | `SCK` / `SCL` | `SCK` / `SCL` |
-| SPI data | **D11 (MOSI)** | `SDA` / `MOSI` | `SDA` / `MOSI` |
+| Clock | **D4** | `SCK` / `SCL` | — |
+| Data | **D3** | `SDA` / `MOSI` | — |
+| Clock | **D13** | — | `SCK` / `SCL` |
+| Data | **D11** | — | `SDA` / `MOSI` |
 | Chip select | **D10** | `CS` | — |
 | Chip select | **D7** | — | `CS` |
 | Data/command | **D9** | `DC` | — |
@@ -43,9 +45,11 @@ Both displays share the Uno's SPI bus (**SCK + MOSI** are common). Each display 
 | Reset | **D5** | — | `RESET` |
 
 Notes:
+- **No shared signal wires** — each display is on its own port, so you never have to tie SCK/MOSI together.
+- The left eye runs the firmware's **fast direct-port bit-bang SPI** (mosi=D3, sclk=D4) — a full 240×240 fill takes ~0.4 s instead of ~10 s with the Adafruit software-SPI path, so the eyes track gaze smoothly. The right eye uses hardware SPI (SCK=D13, MOSI=D11).
 - `MISO` (D12) is **not connected** — the TFTs don't need it for writing.
 - **VCC → 3.3 V** is the safe rule. If your board has an **onboard 3.3 V regulator** (common on ILI9341 2.4″ boards, identifiable by the small regulator + jumper near the header), you may feed `VCC` from the Uno's **5 V** instead — check the board's datasheet/silkscreen first.
-- Backlight: tying `LED` to 3.3 V = full brightness. To dim, move `LED` to **D3** (PWM) on both displays instead.
+- Backlight: tying `LED` to 3.3 V = full brightness. To dim, move `LED` to **D3** (PWM) on the left eye and **D2** on the right instead.
 
 ---
 
@@ -74,8 +78,8 @@ The Uno's outputs are **5 V**; TFT controller chips (ST7735, ILI9341) are rated 
 
 ### Arduino Uno — `eyes_tft/eyes_tft.ino`
 1. Open `eyes_tft/eyes_tft.ino` in the Arduino IDE (it's in its own folder, as Arduino requires).
-2. Install libraries: **Adafruit GFX**, plus **Adafruit ST7735** (1.8″) or **Adafruit ILI9341** (2.4″/2.8″).
-3. Set `DISPLAY_TYPE` at the top to match your boards, and confirm the pin constants match §2.
+2. Install libraries: **Adafruit GFX**, plus **Adafruit ST7735** (1.8″), **Adafruit ILI9341** (2.4″/2.8″) and **Adafruit GC9A01A** (round 1.28″ 240×240).
+3. Set `DEFAULT_TYPE` at the top to match your boards (`1`=ST7735, `2`=ILI9341, `3`=GC9A01A round — the default) and confirm the pin constants match §2.
 4. Upload. Each screen shows one big cartoon eye (sclera + colored iris + pupil).
 
 ### Raspberry Pi 5 — `pi_eyes.py`
@@ -92,10 +96,29 @@ It grabs the robot's USB camera, runs YOLOv8n (`person` class, conf 0.35), and s
 | `T <px> <py>` | Look toward point; `px`,`py` in **0–100** (50,50 = frame center). Both pupils converge on it. |
 | `T -1 -1` | No person in view — pupils return to center. |
 | `PING` | Uno replies `PONG` — wiring/link sanity check. |
+| `TYPE <l> <r>` | Set each eye's controller at runtime: `1` = ST7735, `2` = ILI9341, `3` = GC9A01A round (e.g. `TYPE 3 3`). Re-initializes both displays and re-runs the color test. No re-flash needed. |
+
+### Boot behavior (this is your main diagnostic)
+When the Uno powers up (or resets) it prints the pin map and controller IDs over serial, then **paints LEFT eye RED and RIGHT eye GREEN for 4 seconds** — the color test — then switches to eye mode. What you see during those 4 seconds tells us exactly what's wrong:
+
+| You see | Meaning | Fix |
+|---|---|---|
+| Left RED, right GREEN | Wiring + both inits correct | nothing — eyes follow |
+| One solid color, other blank/garbage | That eye's wiring or controller type is wrong | re-check that eye's 5 wires; try `TYPE` for that eye |
+| Neither shows color | Power problem (VCC/GND/LED/backlight) or wrong controller on both | check power first, then `TYPE 3 3` (GC9A01A) vs `TYPE 2 2` / `TYPE 1 1` |
+| Scrolling lines/garbage | Controller mismatch (ST7735 init on ILI9341 panel or vice-versa), or CS/DC swapped | try the other `TYPE`; swap CS↔DC if needed |
 
 ---
 
-## 6. Bring-up test sequence
+## 6. Bring-up test sequence (with the color test)
+
+1. Upload `eyes_tft/eyes_tft.ino`.
+2. Watch the screens during boot: **LEFT should flash RED, RIGHT should flash GREEN** for ~4 s, then both show one cartoon eye filling the round panel (white sclera circle edge-to-edge, colored iris + dark pupil + highlight).
+3. If the colors are wrong/blank/garbage, use the table above, and switch controller types from the Pi **without re-flashing**:
+   ```bash
+   echo 'TYPE 3 3' > /dev/ttyACM0   # GC9A01A round — or TYPE 1 1 / TYPE 2 2; one build handles any mix
+   ```
+4. `PING` should print `PONG` on the Pi. With this firmware the boot fills take milliseconds-to-sub-second (the Uno prints `FILL L: …ms R: …ms`), and during tracking it prints `REPAINT n=25 avg=…ms` every 25 iris moves so you can see the repaint cost on the serial line.
 
 1. **Power only:** plug the Uno into the Pi. Both TFTs should light up (backlight on) and the Arduino sketch draws the two eyes.
 2. **Serial check:** run `python pi_eyes.py --port /dev/ttyACM0` — the script sends `PING` first and prints `Uno alive: PONG`.
@@ -105,7 +128,16 @@ It grabs the robot's USB camera, runs YOLOv8n (`person` class, conf 0.35), and s
 
 ---
 
-## 7. How the eye movement works (data flow)
+## 7. The most common wiring mistake (read this if you used the old table)
+
+An earlier version of this guide shared one SPI bus (SCK→D13, MOSI→D11 for **both** displays). That is **wrong for the current firmware**. The left eye must be on **its own port**:
+
+- LEFT eye: `SCL/SCK → D4`, `SDA/MOSI → D3`
+- RIGHT eye: `SCK → D13`, `SDA/MOSI → D11`
+
+If you wired **both** displays' clock to D13 and data to D11, the left eye will be blank or show garbage — move its two wires from D13→D4 and D11→D3. Do **not** tie both displays' SCK or MOSI together.
+
+## 8. How the eye movement works (data flow)
 
 ```
 Pi 5 camera → YOLOv8n "person" box → center (cx,cy)
@@ -115,4 +147,12 @@ Arduino Uno → parses line → smooths gaze → maps px,py to pupil offset
             → redraws both TFTs (iris+pupil move toward the target)
 ```
 
-The eye firmware is in `eyes_tft.ino`; the Pi side is `pi_eyes.py`. If your Uno already has its own eye firmware, keep it — just make it accept the `T <px> <py>` / `PING` protocol above so the Pi can drive it.
+The eye firmware is in `eyes_tft/eyes_tft.ino`; the Pi side is `pi_eyes.py`. The current firmware's boot banner is the fastest way to report back: screenshot the serial output (`PING`, probe IDs, per-eye `init:` lines) and tell me which colors each screen showed in the test phase.
+
+### Quick fault-finding checklist (run these in order)
+1. **Backlight** — is the white LED behind the screen on? If not, check the `LED` pin is powered (3.3 V) and its wire isn't swapped with another pin. A lit backlight with no image = init/wiring problem; a dark screen = power problem.
+2. **VCC + GND** — measure 3.3 V between `VCC` and `GND` at each display's header.
+3. **Color test** — reboot the Uno and note each screen's color during the 4 s test (RED = left, GREEN = right).
+4. **Controller type** — try `TYPE 1 1` then `TYPE 2 2` and repeat the color test; one of them should light up solid if the wiring is right.
+5. **Per-eye wiring** — left eye: D4(clock) D3(data) D10(CS) D9(DC) D8(RST). Right eye: D13(clock) D11(data) D7(CS) D6(DC) D5(RST). A blank eye usually means its CS/DC/RST wires are on the wrong Uno pins.
+6. **Optional:** wire the right eye's MISO pin to **D12** — the firmware then auto-detects ST7735 vs ILI9341 and prints the panel ID at boot.

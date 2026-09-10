@@ -31,22 +31,31 @@
   <line x1="400" y1="720" x2="1240" y2="720" stroke="#222" stroke-width="3"/>
   <text x="760" y="714" fill="#999" font-size="13">GND rail (from Uno GND pin)</text>
 
-  <!-- ============ SHARED SPI BUSES ============ -->
-  <!-- SCK bus -->
-  <line x1="890" y1="90" x2="890" y2="640" stroke="#2ECC71" stroke-width="3"/>
-  <line x1="660" y1="90" x2="890" y2="90" stroke="#2ECC71" stroke-width="3"/>
-  <text x="895" y="340" fill="#2ECC71" font-size="13">SCK (D13)</text>
-  <!-- MOSI bus -->
-  <line x1="915" y1="190" x2="915" y2="610" stroke="#F1C40F" stroke-width="3"/>
-  <line x1="660" y1="190" x2="915" y2="190" stroke="#F1C40F" stroke-width="3"/>
-  <text x="920" y="400" fill="#F1C40F" font-size="13">MOSI (D11)</text>
-
-  <!-- SCK drops to both TFTs -->
-  <line x1="890" y1="270" x2="980" y2="270" stroke="#2ECC71" stroke-width="3"/>
-  <line x1="890" y1="630" x2="980" y2="630" stroke="#2ECC71" stroke-width="3" stroke-dasharray="6 4"/>
-  <!-- MOSI drops to both TFTs -->
-  <line x1="915" y1="240" x2="980" y2="240" stroke="#F1C40F" stroke-width="3"/>
-  <line x1="915" y1="600" x2="980" y2="600" stroke="#F1C40F" stroke-width="3" stroke-dasharray="6 4"/>
+  <!-- ============ CLOCK + DATA — one dedicated port per display ============ -->
+  <!-- LEFT eye (TFT #1): software SPI on D4 (clock) + D3 (data) -->
+  <line x1="660" y1="540" x2="860" y2="540" stroke="#2ECC71" stroke-width="3"/>
+  <line x1="860" y1="540" x2="860" y2="270" stroke="#2ECC71" stroke-width="3"/>
+  <line x1="860" y1="270" x2="980" y2="270" stroke="#2ECC71" stroke-width="3"/>
+  <text x="700" y="562" fill="#2ECC71" font-size="12">SCK (D4) → TFT1</text>
+  <line x1="660" y1="590" x2="880" y2="590" stroke="#F1C40F" stroke-width="3"/>
+  <line x1="880" y1="590" x2="880" y2="240" stroke="#F1C40F" stroke-width="3"/>
+  <line x1="880" y1="240" x2="980" y2="240" stroke="#F1C40F" stroke-width="3"/>
+  <text x="700" y="612" fill="#F1C40F" font-size="12">MOSI (D3) → TFT1</text>
+  <!-- RIGHT eye (TFT #2): hardware SPI on D13 (clock) + D11 (data) -->
+  <line x1="660" y1="90" x2="700" y2="90" stroke="#2ECC71" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="700" y1="90" x2="700" y2="630" stroke="#2ECC71" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="700" y1="630" x2="980" y2="630" stroke="#2ECC71" stroke-width="3" stroke-dasharray="6 4"/>
+  <text x="705" y="104" fill="#2ECC71" font-size="12">SCK (D13) → TFT2</text>
+  <line x1="660" y1="190" x2="730" y2="190" stroke="#F1C40F" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="730" y1="190" x2="730" y2="600" stroke="#F1C40F" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="730" y1="600" x2="980" y2="600" stroke="#F1C40F" stroke-width="3" stroke-dasharray="6 4"/>
+  <text x="735" y="212" fill="#F1C40F" font-size="12">MOSI (D11) → TFT2</text>
+  <!-- OPTIONAL MISO: enables controller auto-detect on the right eye -->
+  <line x1="660" y1="140" x2="700" y2="140" stroke="#E0A0FF" stroke-width="2" stroke-dasharray="4 4"/>
+  <line x1="700" y1="140" x2="700" y2="520" stroke="#E0A0FF" stroke-width="2" stroke-dasharray="4 4"/>
+  <line x1="700" y1="520" x2="980" y2="520" stroke="#E0A0FF" stroke-width="2" stroke-dasharray="4 4"/>
+  <text x="706" y="162" fill="#E0A0FF" font-size="11">MISO (D12) → right eye MISO</text>
+  <text x="706" y="176" fill="#78909C" font-size="11">OPTIONAL — enables controller auto-detect</text>
 
   <!-- 3.3V drops (VCC + LED backlight) -->
   <line x1="990" y1="52" x2="990" y2="90" stroke="#E67E22" stroke-width="3"/>
@@ -112,6 +121,8 @@
     <text x="670" y="394" text-anchor="end">D7</text>
     <text x="670" y="444" text-anchor="end">D6</text>
     <text x="670" y="494" text-anchor="end">D5</text>
+    <text x="670" y="544" text-anchor="end">D4</text>
+    <text x="670" y="594" text-anchor="end">D3</text>
   </g>
   <!-- pin labels left (power) -->
   <g font-size="12" fill="#E0F7FA" text-anchor="end">
@@ -124,6 +135,7 @@
     <circle cx="660" cy="90" r="4"/><circle cx="660" cy="140" r="4"/><circle cx="660" cy="190" r="4"/>
     <circle cx="660" cy="240" r="4"/><circle cx="660" cy="290" r="4"/><circle cx="660" cy="340" r="4"/>
     <circle cx="660" cy="390" r="4"/><circle cx="660" cy="440" r="4"/><circle cx="660" cy="490" r="4"/>
+    <circle cx="660" cy="540" r="4"/><circle cx="660" cy="590" r="4"/>
     <circle cx="400" cy="170" r="4"/><circle cx="400" cy="210" r="4"/><circle cx="400" cy="250" r="4"/>
   </g>
 
@@ -131,7 +143,7 @@
   <g font-size="12" fill="#78909C">
     <rect x="700" y="560" width="250" height="70" rx="6" fill="none" stroke="#546E7A" stroke-width="1.5" stroke-dasharray="5 4"/>
     <text x="712" y="580" fill="#F5BD5F">OPTIONAL: put a 8-ch level shifter</text>
-    <text x="712" y="598" fill="#78909C">(TXS0108E / 74AHCT125 x2) on the 8</text>
+    <text x="712" y="598" fill="#78909C">(TXS0108E x2 / 74AHCT125 x3) on the 10</text>
     <text x="712" y="616" fill="#78909C">signal lines if your board is strict 3.3 V</text>
   </g>
 
@@ -139,6 +151,7 @@
   <rect x="980" y="60" width="260" height="280" rx="8" fill="#23262B" stroke="#8AB4F8" stroke-width="2"/>
   <text x="1000" y="86" fill="#8AB4F8" font-size="15" font-weight="bold">TFT #1 — LEFT EYE</text>
   <text x="1000" y="104" fill="#78909C" font-size="12">ST7735 1.8″ or ILI9341 2.4″/2.8″</text>
+  <text x="1000" y="120" fill="#5AF78E" font-size="12">own port: D4+D3 (no shared wires)</text>
   <g font-size="12" fill="#DDD">
     <text x="972" y="94" text-anchor="end">VCC</text>
     <text x="972" y="124" text-anchor="end">GND</text>
@@ -155,6 +168,7 @@
   <rect x="980" y="420" width="260" height="280" rx="8" fill="#23262B" stroke="#8AB4F8" stroke-width="2"/>
   <text x="1000" y="446" fill="#8AB4F8" font-size="15" font-weight="bold">TFT #2 — RIGHT EYE</text>
   <text x="1000" y="464" fill="#78909C" font-size="12">ST7735 1.8″ or ILI9341 2.4″/2.8″</text>
+  <text x="1000" y="480" fill="#5AF78E" font-size="12">own port: D13+D11 (no shared wires)</text>
   <g font-size="12" fill="#DDD">
     <text x="972" y="454" text-anchor="end">VCC</text>
     <text x="972" y="484" text-anchor="end">GND</text>
