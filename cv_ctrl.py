@@ -1419,17 +1419,29 @@ class OpencvFuncs():
     
         # Detect objects in the frame, specifically looking for persons
         stop_robot = False
-        objects, _, boxes = self.cv_detect_objects(img)
-        
-        # Check if any detected objects are persons
-        for obj_class, box in zip(objects, boxes):
+        objects, confidences, boxes = self.cv_detect_objects(img)
+
+        # Safety stop for REAL close people only. YOLO at 0.25 conf
+        # false-positives on chairs, doors, posters at any distance, which
+        # froze auto-drive a few feet in and it never continued. Require a
+        # large box (someone genuinely close to the robot) AND decent
+        # confidence AND 3 consecutive frames of evidence before stopping.
+        img_h = img.shape[0]
+        close_person = False
+        for obj_class, conf, box in zip(objects, confidences, boxes):
             x_min, y_min, x_max, y_max = box
-            if obj_class == "person":
-                stop_robot = True
+            if obj_class == "person" and conf >= 0.35 and (y_max - y_min) >= img_h * 0.18:
+                close_person = True
                 # Draw bounding box for the detected person
                 cv2.rectangle(img, (x_min, y_min), (x_max, y_max), (0, 0, 255), 2)
                 cv2.putText(img, "Person Detected", (x_min, y_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-                threading.Thread(target=self.announce_person_detected).start()  # Announce detection if needed
+        if close_person:
+            self.person_frames = getattr(self, "person_frames", 0) + 1
+        else:
+            self.person_frames = 0
+        if self.person_frames >= 3:
+            stop_robot = True
+            threading.Thread(target=self.announce_person_detected).start()  # Announce detection if needed
     
         # Set speed based on line and person detection
         final_speed = self.line_track_speed * 0.6 if line_detected else self.line_track_speed * 0.4
@@ -1880,10 +1892,22 @@ class OpencvFuncs():
         logging.info(f"Executing command: {command}")
         if command == "start_auto_drive":
             logging.info("Starting auto drive...")
-            self.set_cv_mode(f['code']['cv_auto'])  # Automatically switch to auto drive mode
             self.robot_moving = True
             self.cv_auto_drive_active = True  # Flag to track auto-drive status
-            
+
+            # "Auto-drive" is LIDAR cruise: let the avoider drive forward and
+            # avoid obstacles. Do NOT pause() it here — pausing killed the lidar
+            # cruise (the watchdog can't re-enable it because
+            # _last_manual_cmd_time starts at 0 at boot) and the camera
+            # line-follow that took over creeps at ~6 cm/s with no line then
+            # freezes on the first close object = "drives forward then stops".
+            avoider = getattr(self, "avoider", None)
+            if avoider is not None and f['base_config']['use_lidar']:
+                avoider.resume()
+            else:
+                # No LIDAR: fall back to camera line-follow.
+                self.set_cv_mode(f['code']['cv_auto'])
+
             # Optionally, provide feedback to the user
             self.speak_minion("Auto-drive started boss!")
             
@@ -1892,7 +1916,14 @@ class OpencvFuncs():
             self.robot_moving = False
             self.cv_auto_drive_active = False  # Disable auto-drive flag
             self.set_cv_mode(f['code']['cv_none'])  # Reset mode to default
-            
+
+            # Hand the wheels back / halt so the ESP32 doesn't keep the last
+            # avoider speed latched (that latch made the robot keep rolling
+            # after "stop").
+            avoider = getattr(self, "avoider", None)
+            if avoider is not None:
+                avoider.pause(halt=True)
+
             # Provide feedback to the user
             self.speak_minion("Auto-drive stopped.")
 
@@ -2003,9 +2034,18 @@ class OpencvFuncs():
         logging.info(f"Executing command: {command}")
         if command == "start_auto_drive":
             logging.info("Starting auto drive...")
-            self.set_cv_mode(f['code']['cv_auto'])
             self.robot_moving = True
             self.cv_auto_drive_active = True
+            # "Auto-drive" is LIDAR cruise: let the avoider drive forward and
+            # avoid obstacles instead of pausing it (which killed the lidar
+            # cruise and left the camera line-follow creeping at ~6 cm/s with
+            # no line before freezing = "drives forward then stops").
+            avoider = getattr(self, "avoider", None)
+            if avoider is not None and f['base_config']['use_lidar']:
+                avoider.resume()
+            else:
+                # No LIDAR: fall back to camera line-follow.
+                self.set_cv_mode(f['code']['cv_auto'])
             self.log_command_output({"action": "start_auto_drive"})
 
         elif command == "stop_auto_drive":
@@ -2013,6 +2053,10 @@ class OpencvFuncs():
             self.robot_moving = False
             self.cv_auto_drive_active = False
             self.set_cv_mode(f['code']['cv_none'])
+            # Halt so the ESP32 doesn't keep the last avoider speed latched.
+            avoider = getattr(self, "avoider", None)
+            if avoider is not None:
+                avoider.pause(halt=True)
             self.log_command_output({"action": "stop_auto_drive"})
 
     # Add log_command_output calls to other methods as needed

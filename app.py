@@ -69,6 +69,9 @@ MAX_TURN_BIAS   = 0.45
 # Timing
 REVERSE_SEC     = 0.6
 TURN_SEC        = 0.9
+EVADE_HOLD_SEC  = 1.2  # keep curving after an evade so the robot ROUNDS the
+                       # obstacle and continues instead of snapping back to
+                       # straight and re-hitting it ('drive forward then stop')
 MANUAL_PAUSE_SEC = 8.0  # seconds after last joystick input before avoider resumes
                        # (3s was short enough that the avoider could re-engage
                        # between two deliberate maneuvers and fight the next one)
@@ -143,6 +146,8 @@ class LidarAvoider:
         self._last_L    = 0.0
         self._last_R    = 0.0
         self._cooldown  = 0.0
+        self._hold_until = 0.0   # keep the evade turn going until this time
+        self._last_bias  = 1.0   # direction of the last evade/reverse maneuver
 
     # ── public ───────────────────────────────────────────────────────────────
 
@@ -163,6 +168,13 @@ class LidarAvoider:
     def pause(self, halt=False):
         """Yield control to manual driver (halt=True also stops the wheels so
         the ESP32 doesn't keep the last avoider speed)."""
+        import traceback
+        logging.warning("[LidarAvoider] pause(halt=%s) called from:\n%s",
+                        halt, "".join(traceback.format_stack()[:10]))
+        # Also mirror to stdout (ugv.log) — the Log.txt handler on the Pi is
+        # NUL-corrupted and stops accepting writes.
+        print("[LidarAvoider] pause(halt=%s) called from:\n%s" %
+              (halt, "".join(traceback.format_stack()[:10])), flush=True)
         self._active = False
         self.state   = self.IDLE
         if halt:
@@ -210,6 +222,8 @@ class LidarAvoider:
             bias = _turn_bias(angles, distances)
             if abs(bias) < 0.15:
                 bias = 1.0 if front_left > front_right else -1.0
+            self._last_bias = bias
+            self._hold_until = now + EVADE_HOLD_SEC
             self._reverse_and_turn(bias, rear)
             return
 
@@ -219,6 +233,8 @@ class LidarAvoider:
             bias = _turn_bias(angles, distances)
             if abs(bias) < 0.1:
                 bias = 1.0 if front_left > front_right else -1.0
+            self._last_bias = bias
+            self._hold_until = now + EVADE_HOLD_SEC
 
             # Speed scales with remaining clearance (closer = slower)
             spd_f = np.clip(
@@ -240,11 +256,12 @@ class LidarAvoider:
         # ── DANGER SLOW: reduce speed with gentle bias ────────────────────
         if front < LIDAR_SLOW_MM:
             self.state = self.SLOW
+            bias  = _turn_bias(angles, distances)
+            self._last_bias = bias
             spd_f = np.clip(
                 (front - LIDAR_TURN_MM) / (LIDAR_SLOW_MM - LIDAR_TURN_MM),
                 0.0, 1.0)
             fwd   = float(SLOW_SPD + (CRUISE_SPD - SLOW_SPD) * spd_f)
-            bias  = _turn_bias(angles, distances)
             turn  = float(MAX_TURN_BIAS * 0.4 * abs(bias))
 
             if bias > 0:
@@ -258,6 +275,20 @@ class LidarAvoider:
             return
 
         # ── Clear path: cruise ────────────────────────────────────────────
+        if now < self._hold_until:
+            # We just evaded/reversed: keep curving for a moment instead of
+            # snapping back to straight-ahead the instant the front cone
+            # clears. Without this the robot re-approaches the same obstacle
+            # and looks like it 'drives forward then stops a few feet'.
+            self.state = self.EVADE
+            fwd, turn = SLOW_SPD, MAX_TURN_BIAS * 0.8
+            if self._last_bias > 0:
+                L, R = fwd - turn, fwd + turn
+            else:
+                L, R = fwd + turn, fwd - turn
+            self._send(float(np.clip(L, -1.0, 1.0)),
+                       float(np.clip(R, -1.0, 1.0)))
+            return
         self.state = self.CRUISE
         self._send(CRUISE_SPD, CRUISE_SPD)
 

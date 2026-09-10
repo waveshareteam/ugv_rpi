@@ -41,7 +41,7 @@ Available actions:
 - lights    params: {"on": true|false}  Headlights on or off.
 - picture   params: {}  Take a photo.
 - video     params: {"rec": true|false}  Start or stop recording video.
-- auto_drive params: {"on": true|false}  Follow-the-line auto mode on or off.
+- auto_drive params: {"on": true|false}  LIDAR auto-drive on or off (robot drives forward and avoids obstacles on its own).
 - avoidance params: {"on": true|false}  LIDAR obstacle avoidance on or off.
 - gimbal    params: {"dir": "up|down|left|right"}  Tilt/pan the camera head.
 - detect    params: {}  LOOK through the camera and NAME the objects in front of the robot. Use for: "what do you see", "detect", "look at", "identify", "what's in front of you", "what is that". NEVER use gimbal for these.
