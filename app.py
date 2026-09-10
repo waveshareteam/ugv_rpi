@@ -47,6 +47,7 @@ import numpy as np
 import cv_ctrl
 import audio_ctrl
 import os_info
+import self_drive
 
 # ─────────────────────────────────────────────────────────────────────────────
 # LIDAR Obstacle Avoidance
@@ -290,7 +291,14 @@ class LidarAvoider:
                        float(np.clip(R, -1.0, 1.0)))
             return
         self.state = self.CRUISE
-        self._send(CRUISE_SPD, CRUISE_SPD)
+        # Self-drive planner picks the cruise heading (learned memory of walls
+        # + objects, live lidar); the avoider still owns the emergency states.
+        turn = 0.0
+        planner = getattr(self, 'planner', None)
+        if planner is not None and planner.active:
+            turn = planner.suggested_turn
+        self._send(CRUISE_SPD * (1.0 - turn),
+                   CRUISE_SPD * (1.0 + turn))
 
     def _sleep_interruptible(self, seconds):
         """Sleep in short slices, aborting early when paused or stopped."""
@@ -373,6 +381,16 @@ cvf = cv_ctrl.OpencvFuncs(thisPath, base)
 # LIDAR avoider (starts later in __main__ if use_lidar is true)
 avoider = LidarAvoider(base)
 cvf.avoider = avoider  # hand Lance (voice brain) a handle to pause/resume avoidance
+# Self-driving planner: learns surroundings (lidar grid + camera objects) and
+# steers the avoider's cruise toward safe headings. Started paused at boot.
+self_driver = self_drive.SelfDriver(base, cvf, self_drive.SpatialMemory(path=thisPath + '/surroundings.json'))
+avoider.planner = self_driver
+cvf.self_driver = self_driver
+
+# Self-drive can run as a standalone capable mode: it drives forward and
+# learns the room while avoiding what it has already mapped. 'capable' on
+# enables it; 'capable off' stops it (same ramp/stop as auto-drive).
+
 
 try:
     cvf.toggle_listening()  # auto-start Lance's wake-word voice loop at boot
@@ -913,7 +931,7 @@ def force_reboot():
         print(f"Error triggering force reboot: {e}")
         return jsonify({'status': 'error', 'message': 'Failed to trigger reboot'})
 
-# ── LIDAR avoidance control endpoints ────────────────────────────────────────
+# ── LIDAR avoidance + self-drive control endpoints ───────────────────────────
 
 @app.route('/lidar_avoidance', methods=['POST'])
 def toggle_lidar_avoidance():
@@ -933,6 +951,79 @@ def toggle_lidar_avoidance():
     return jsonify({'status': 'success', 'message': msg,
                     'avoidance_active': avoider._active,
                     'avoidance_state':  avoider.state})
+
+@app.route('/selfdrive', methods=['POST'])
+def toggle_selfdrive():
+    """Enable or disable onboard self-driving (LIDAR + camera learning).
+    When on it drives forward and uses the learned surroundings map to steer
+    around walls and remembered objects; it is independent of the manual
+    joystick and the simple LIDAR avoid-on/off toggle.
+    Accepts ?enable=true (on) or ?enable=false (off), or form field enable."""
+    global _last_manual_cmd_time
+    enable = request.form.get('enable', 'true').lower() == 'true'
+    if enable:
+        self_driver.start()
+        self_driver.resume()
+        msg = 'Self-drive enabled'
+    else:
+        self_driver.pause(save=True)
+        self_driver.stop()
+        msg = 'Self-drive disabled'
+    return jsonify({'status': 'success', 'message': msg,
+                    'selfdrive_active': self_driver.active,
+                    'decision': self_driver.last_decision})
+
+# Command-line / socket synonym so the same surface works from every channel.
+toggle_selfdrive_enabled = toggle_selfdrive
+toggle_selfdrive_enabled_on_cmd = toggle_selfdrive
+
+@app.route('/selfdrive_status')
+def selfdrive_status():
+    """Live planner state: active flag, suggested heading, learned cells/objects."""
+    return jsonify(self_driver.status())
+
+@app.route('/surroundings')
+def surroundings():
+    """Learned surroundings for the UI: occupancy cells (robot frame, m) + objects."""
+    return jsonify({
+        'cells': [{'x': mx, 'y': my, 'hits': h}
+                  for mx, my, h in self_driver.memory.cells(min_hits=1)],
+        'objects': self_driver.memory.objects[-50:][::-1],
+        'busy_cells': self_driver.memory.busy_cells,
+    })
+
+@app.route('/selfdrive_map', methods=['POST'])
+def selfdrive_map():
+    """Load / save / clear the learned surroundings."""
+    action = request.form.get('action', 'status')
+    if action == 'save':
+        ok = self_driver.memory.save()
+        return jsonify({'status': 'success' if ok else 'error',
+                        'busy_cells': self_driver.memory.busy_cells})
+    if action == 'clear':
+        self_driver.memory.clear()
+        return jsonify({'status': 'success', 'busy_cells': 0})
+    if action == 'load':
+        self_driver.memory._load()
+        return jsonify({'status': 'success',
+                        'busy_cells': self_driver.memory.busy_cells,
+                        'objects': self_driver.memory.objects[-20:]})
+    if action == 'status':
+        return jsonify({'status': 'ok',
+                        'busy_cells': self_driver.memory.busy_cells,
+                        'objects': self_driver.memory.objects[-20:]})
+    return jsonify({'status': 'error', 'message': f'unknown action {action}'}), 400
+
+@app.route('/map_save', methods=['POST'])
+def map_save():
+    ok = self_driver.memory.save()
+    return jsonify({'status': 'success' if ok else 'error',
+                    'busy_cells': self_driver.memory.busy_cells})
+
+@app.route('/map_clear', methods=['POST'])
+def map_clear():
+    self_driver.memory.clear()
+    return jsonify({'status': 'success', 'busy_cells': 0})
 
 @app.route('/api/lance', methods=['POST'])
 def api_lance():
@@ -1425,6 +1516,7 @@ def manual_control_watchdog():
             if _last_manual_cmd_time > 0 and \
                time.time() - _last_manual_cmd_time > MANUAL_PAUSE_SEC:
                 avoider.resume()
+                self_driver.resume()
                 logging.info("[app] Avoidance re-enabled by watchdog")
 
 
@@ -1587,6 +1679,26 @@ def cmdline_ctrl(args_string):
                 _last_manual_cmd_time = 0.0
                 cvf.info_update("Avoidance OFF", (0,128,255), 0.36)
 
+    elif args[0] == 'selfdrive':
+        # Self-driving planner:  selfdrive on | selfdrive off
+        if len(args) > 1:
+            if args[1] == 'on':
+                self_driver.resume()
+                cvf.info_update("Self-drive ON", (0,255,0), 0.36)
+            elif args[1] == 'off':
+                self_driver.pause()
+                cvf.info_update("Self-drive OFF", (0,128,255), 0.36)
+
+    elif args[0] == 'map':
+        # Learned surroundings:  map save | map clear | map status
+        if len(args) > 1:
+            if args[1] == 'save':
+                self_driver.memory.save()
+            elif args[1] == 'clear':
+                self_driver.memory.clear()
+            elif args[1] == 'status':
+                print(json.dumps(self_driver.status()))
+
     elif args[0] == 'test':
         cvf.update_base_data({"T":1003,"mac":1111,"megs":"helllo aaaaaaaa"})
 
@@ -1662,6 +1774,8 @@ if __name__ == "__main__":
         # enables it from the UI (or drives manually) - never self-drive at boot.
         avoider.start()
         avoider.pause()
+        self_driver.start()
+        self_driver.pause(save=False)
         threading.Thread(target=manual_control_watchdog, daemon=True,
                          name="avoidance-watchdog").start()
         print("[app] LIDAR data stream started (avoidance paused - enable in UI)")

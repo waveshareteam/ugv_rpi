@@ -1904,13 +1904,16 @@ class OpencvFuncs():
             avoider = getattr(self, "avoider", None)
             if avoider is not None and f['base_config']['use_lidar']:
                 avoider.resume()
+                sd = getattr(self, "self_driver", None)
+                if sd is not None:
+                    sd.resume()   # planner learns surroundings + steers cruise
             else:
                 # No LIDAR: fall back to camera line-follow.
                 self.set_cv_mode(f['code']['cv_auto'])
 
             # Optionally, provide feedback to the user
             self.speak_minion("Auto-drive started boss!")
-            
+
         elif command == "stop_auto_drive":
             logging.info("Stopping auto drive...")
             self.robot_moving = False
@@ -1923,6 +1926,9 @@ class OpencvFuncs():
             avoider = getattr(self, "avoider", None)
             if avoider is not None:
                 avoider.pause(halt=True)
+            sd = getattr(self, "self_driver", None)
+            if sd is not None:
+                sd.pause()   # persist the learned surroundings
 
             # Provide feedback to the user
             self.speak_minion("Auto-drive stopped.")
@@ -2029,27 +2035,29 @@ class OpencvFuncs():
     # Example for other command methods
     def execute_command(self, command):
         """
-        Executes specific robot commands (e.g., start/stop auto drive) and logs them.
+        Executes specific robot commands (e.g., start/stop self-drive) and logs them.
         """
         logging.info(f"Executing command: {command}")
         if command == "start_auto_drive":
-            logging.info("Starting auto drive...")
+            logging.info("Starting self-drive...")
             self.robot_moving = True
             self.cv_auto_drive_active = True
-            # "Auto-drive" is LIDAR cruise: let the avoider drive forward and
-            # avoid obstacles instead of pausing it (which killed the lidar
-            # cruise and left the camera line-follow creeping at ~6 cm/s with
-            # no line before freezing = "drives forward then stops").
-            avoider = getattr(self, "avoider", None)
-            if avoider is not None and f['base_config']['use_lidar']:
-                avoider.resume()
+            # Start the learning self-driver so the robot learns its surroundings
+            # (LIDAR grid + camera objects) and uses them to pick safe headings.
+            self.self_driver = getattr(self, "self_driver", None)
+            if self.self_driver is not None:
+                self.self_driver.start()
+                self.self_driver.resume()
+            sd = getattr(self, "self_driver", None)
+            if sd is not None and f['base_config']['use_lidar']:
+                sd.resume()   # planner learns surroundings + steers cruise
             else:
                 # No LIDAR: fall back to camera line-follow.
                 self.set_cv_mode(f['code']['cv_auto'])
-            self.log_command_output({"action": "start_auto_drive"})
+            self.log_command_output({"action": "start_self_drive"})
 
         elif command == "stop_auto_drive":
-            logging.info("Stopping auto drive...")
+            logging.info("Stopping self-drive...")
             self.robot_moving = False
             self.cv_auto_drive_active = False
             self.set_cv_mode(f['code']['cv_none'])
@@ -2057,7 +2065,10 @@ class OpencvFuncs():
             avoider = getattr(self, "avoider", None)
             if avoider is not None:
                 avoider.pause(halt=True)
-            self.log_command_output({"action": "stop_auto_drive"})
+            sd = getattr(self, "self_driver", None)
+            if sd is not None:
+                sd.pause()   # persist the learned surroundings
+            self.log_command_output({"action": "stop_self_drive"})
 
     # Add log_command_output calls to other methods as needed
 

@@ -10,3 +10,8 @@ yolov7.pt
 yolov8*-world*.pt
 known_objects.json
 world_embeddings.pkl
+surroundings.json
+
+# OS generated files
+.DS_Store
+Thumbs.db

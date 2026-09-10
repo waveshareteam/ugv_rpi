@@ -41,8 +41,11 @@ Available actions:
 - lights    params: {"on": true|false}  Headlights on or off.
 - picture   params: {}  Take a photo.
 - video     params: {"rec": true|false}  Start or stop recording video.
-- auto_drive params: {"on": true|false}  LIDAR auto-drive on or off (robot drives forward and avoids obstacles on its own).
+- self_drive params: {"on": true|false}  start/stop the learning self-driver (LIDAR + camera learning, drives on its own and remembers the room)
+- selfdrive params: {"on": true|false}  same as self_drive — enable or disable learning self-drive
+- map       params: {"action": "status|save|clear"}  Report / persist / wipe the learned surroundings (walls + objects).
 - avoidance params: {"on": true|false}  LIDAR obstacle avoidance on or off.
+- capable params: {"on": true|false}  enable or disable standalone self-driving mode (same as selfdrive)
 - gimbal    params: {"dir": "up|down|left|right"}  Tilt/pan the camera head.
 - detect    params: {}  LOOK through the camera and NAME the objects in front of the robot. Use for: "what do you see", "detect", "look at", "identify", "what's in front of you", "what is that". NEVER use gimbal for these.
 - learn     params: {"name": "stapler"}  The user TEACHES you a new object they are showing you ("learn that this is a stapler", "this is called a mug", "what you're looking at is a banana"). Add it to your vocabulary so you can recognize it forever.
@@ -217,7 +220,52 @@ def _nearest(robot):
 def _auto_drive(robot, params, say):
     on = bool(params.get("on"))
     robot.execute_command("start_auto_drive" if on else "stop_auto_drive")
-    return "Following the line, boss!" if on else "Auto drive stopped."
+    return "Driving on my own, boss! I'll learn the room as I go." if on else "Auto drive stopped — map saved."
+
+def _self_drive(robot, params, say):
+    on = bool(params.get("on"))
+    if on:
+        robot.self_driver.start()
+        robot.self_driver.resume()
+        return "Self-drive on — I'm learning the room as I move."
+    else:
+        robot.self_driver.pause(save=True)
+        robot.self_driver.stop()
+        return "Self-drive off — map saved."
+
+def _selfdrive(robot, params, say):
+    # alias for self_drive (some utterances say 'selfdrive on/off')
+    return _self_drive(robot, params, say)
+
+def _capable(robot, params, say):
+    on = bool(params.get("on"))
+    if on:
+        robot.self_driver.start()
+        robot.self_driver.resume()
+        return "Capable mode on — I'll drive and learn on my own."
+    else:
+        robot.self_driver.pause(save=True)
+        robot.self_driver.stop()
+        return "Capable mode off — map saved."
+
+
+def _map(robot, params, say):
+    """Report or persist the learned surroundings (walls + objects)."""
+    action = (params.get("action") or "status").lower()
+    sd = getattr(robot, "self_driver", None)
+    if sd is None:
+        return "I haven't started learning the room yet, boss."
+    mem = sd.memory
+    if action == "save":
+        mem.save()
+        return (f"Saved my map of the room — {mem.busy_cells} obstacle cells, "
+                f"{len(mem.objects)} objects remembered.")
+    if action == "clear":
+        mem.clear()
+        return "Map cleared — I'll relearn the room as I drive."
+    objs = ", ".join(sorted({o['name'] for o in mem.objects})[:8]) or "none yet"
+    return (f"I've mapped {mem.busy_cells} obstacle cells and learned: {objs}. "
+            "Drive around and I'll learn more.")
 
 
 def _avoidance(robot, params, say):
@@ -269,13 +317,31 @@ def _detect(robot, params, say):
 
 
 def _learn(robot, params, say):
-    """Self-learning: teach Lance a new object name so it can recognize it."""
+    """Self-learning: teach Lance a new object name so it can recognize it.
+    If the user is currently self-driving, also announce it into the planner
+    so the robot records this object as part of its surroundings."""
     name = (params.get("name") or "").strip()
     if not name:
         return "What should I learn? Tell me the object's name!"
     if not hasattr(robot, 'learn_object'):
         return "I can't learn new things yet, boss!"
-    return robot.learn_object(name)
+    result = robot.learn_object(name)
+    # If self-drive is active, log the new known object into the map too so the
+    # robot treats it as a remembered obstacle even if the camera isn't looking now.
+    sd = getattr(robot, 'self_driver', None)
+    if sd is not None and sd.active:
+        try:
+            last = (getattr(robot, 'last_detections', None) or [{}])[0]
+            box = last.get('box')
+            if box:
+                import math
+                cx = (box[0] + box[2]) / 2.0
+                bearing = round((cx / 640.0 - 0.5) * 60.0, 1)
+                sd.memory.observe_object(name, bearing, 0.5, 1.0)
+                sd.memory.save()
+        except Exception:
+            pass
+    return result
 
 
 ACTIONS = {
@@ -286,7 +352,11 @@ ACTIONS = {
     "picture": _picture,
     "video": _video,
     "auto_drive": _auto_drive,
+    "self_drive": _self_drive,
+    "selfdrive": _selfdrive,
+    "capable": _capable,
     "avoidance": _avoidance,
+    "map": _map,
     "gimbal": _gimbal,
     "detect": _detect,
     "learn": _learn,
