@@ -47,6 +47,9 @@
                             <TextBlock Style="{StaticResource HudValue}" Text="{Binding RssiText}"/>
                         </StackPanel>
                     </Grid>
+                    <TextBlock Style="{StaticResource HudText}" Text="STORAGE" Margin="0,10,0,0"/>
+                    <TextBlock Style="{StaticResource HudValue}" Text="{Binding DiskRootText}"/>
+                    <TextBlock Style="{StaticResource HudValue}" Text="{Binding DiskUsbText}"/>
                 </StackPanel>
             </Border>
 

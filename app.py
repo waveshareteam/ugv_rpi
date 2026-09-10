@@ -1275,7 +1275,13 @@ def update_data_websocket_single():
             f['fb']['base_voltage']: base.base_data['v'],
             f['fb']['video_fps']:    cvf.video_fps,
             f['fb']['cv_movtion_mode']: cvf.cv_movtion_lock,
-            f['fb']['base_light']:   base.base_light_status
+            f['fb']['base_light']:   base.base_light_status,
+            # Human-readable extras for desktop clients (the web UI ignores
+            # keys it doesn't know). Free/total space in GB per drive.
+            'disk_root_total_gb': si.disk_root_total,
+            'disk_root_free_gb':  si.disk_root_free,
+            'disk_usb_total_gb':  si.disk_usb_total,
+            'disk_usb_free_gb':   si.disk_usb_free,
         }
         socketio.emit('update', socket_data, namespace='/ctrl')
     except Exception as e:

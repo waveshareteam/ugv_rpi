@@ -17,6 +17,13 @@ class SystemInfo(threading.Thread):
         self.ram = 0
         self.wifi_rssi = 0
 
+        # Free/total disk space (GB) for the SD card (root) and a USB drive
+        # if one is plugged in (reported as 0 when absent).
+        self.disk_root_total = 0
+        self.disk_root_free = 0
+        self.disk_usb_total = 0
+        self.disk_usb_free = 0
+
         self.net_interface = "wlan0"
         self.wlan_ip = None
         self.eth0_ip = None
@@ -45,6 +52,38 @@ class SystemInfo(threading.Thread):
     def update_folder(self, input_path):
         self.this_path = input_path
         threading.Thread(target=self.update_folder_size, daemon=True).start()
+
+    def update_disk_usage(self):
+        """Refresh free/total space (GB) on the SD card (/) and, if present, the
+        first USB block device (e.g. /dev/sda1 mounted at /mnt or /media)."""
+        try:
+            root = psutil.disk_usage('/')
+            self.disk_root_total = round(root.total / (1024 ** 3), 1)
+            self.disk_root_free = round(root.free / (1024 ** 3), 1)
+        except Exception as e:
+            print("Error reading root disk usage:", e)
+        usb = None
+        try:
+            for part in psutil.disk_partitions(all=False):
+                dev = part.device or ''
+                mp = part.mountpoint or ''
+                if dev.startswith('/dev/sd') and mp not in ('/', '/boot', '/boot/firmware'):
+                    usb = part
+                    break
+        except Exception:
+            pass
+        try:
+            if usb is not None:
+                u = psutil.disk_usage(usb.mountpoint)
+                self.disk_usb_total = round(u.total / (1024 ** 3), 1)
+                self.disk_usb_free = round(u.free / (1024 ** 3), 1)
+            else:
+                self.disk_usb_total = 0
+                self.disk_usb_free = 0
+        except Exception as e:
+            self.disk_usb_total = 0
+            self.disk_usb_free = 0
+            print("Error reading USB disk usage:", e)
 
     def get_cpu_temperature(self):
         try:
@@ -114,6 +153,7 @@ class SystemInfo(threading.Thread):
         self.cpu_temp = self.get_cpu_temperature()
         self.ram = psutil.virtual_memory().percent
         self.cpu_load = psutil.cpu_percent(interval = self.update_interval)
+        self.update_disk_usage()
         while True:
             self.cpu_temp = self.get_cpu_temperature()
             time.sleep(0.5)
@@ -126,6 +166,8 @@ class SystemInfo(threading.Thread):
             self.wlan_ip = self.get_ip_address(self.net_interface)
             time.sleep(0.5)
             self.eth0_ip = self.get_ip_address('eth0')
+            time.sleep(0.5)
+            self.update_disk_usage()
             time.sleep(0.5)
             self.cpu_load = psutil.cpu_percent(interval = self.update_interval)
             self.__flag.wait()

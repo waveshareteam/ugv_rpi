@@ -175,11 +175,28 @@ public sealed class RobotClient : IAsyncDisposable
         if (ev != "update") return;
         try
         {
-            if (data.TryGetProperty("CPU", out var cpu)) State.Cpu = cpu.GetDouble();
-            if (data.TryGetProperty("RAM", out var ram)) State.Ram = ram.GetDouble();
-            if (data.TryGetProperty("base_voltage", out var v)) State.Volt = v.GetDouble();
-            if (data.TryGetProperty("RSSI", out var r)) State.Rssi = r.GetDouble();
-            if (data.TryGetProperty("temp", out var t)) State.Temp = t.GetDouble();
+            // The Pi keys the payload by the numeric fb ids from config.yaml
+            // (e.g. 106 = cpu_load, 108 = ram_usage, 111 = wifi_rssi,
+            // 112 = base_voltage, 107 = cpu_temp). Accept either that id or a
+            // human-readable string name so we work with any server version.
+            double Num(int id, string name)
+            {
+                if (data.TryGetProperty(id.ToString(), out var v) || data.TryGetProperty(name, out v))
+                    return v.GetDouble();
+                return double.NaN;
+            }
+
+            var cpu = Num(State.FbCpuId, "CPU");   if (!double.IsNaN(cpu)) State.Cpu = cpu;
+            var ram = Num(State.FbRamId, "RAM");   if (!double.IsNaN(ram)) State.Ram = ram;
+            var rssi = Num(State.FbRssiId, "RSSI"); if (!double.IsNaN(rssi)) State.Rssi = rssi;
+            var t = Num(State.FbTempId, "temp");   if (!double.IsNaN(t)) State.Temp = t;
+            var v = Num(State.FbVoltId, "base_voltage");
+            if (!double.IsNaN(v)) State.Volt = v;   // ESP32 reports volts directly (e.g. 11.84)
+
+            if (data.TryGetProperty("disk_root_total_gb", out var drt)) State.DiskRootTotal = drt.GetDouble();
+            if (data.TryGetProperty("disk_root_free_gb", out var drf)) State.DiskRootFree = drf.GetDouble();
+            if (data.TryGetProperty("disk_usb_total_gb", out var dut)) State.DiskUsbTotal = dut.GetDouble();
+            if (data.TryGetProperty("disk_usb_free_gb", out var duf)) State.DiskUsbFree = duf.GetDouble();
         }
         catch { }
     }

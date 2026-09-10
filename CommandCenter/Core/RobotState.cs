@@ -40,6 +40,10 @@ public class RobotState : System.ComponentModel.INotifyPropertyChanged
     public int CmdCvTrack = 10307;
 
     // ── live telemetry ──
+    // The Pi publishes the /ctrl 'update' payload keyed by the numeric fb ids
+    // from config.yaml (web UI convention). Keep them here so RobotClient can
+    // map them; string fallbacks are handled in RobotClient.OnCtrlEvent.
+    public int FbCpuId = 106, FbRamId = 108, FbTempId = 107, FbRssiId = 111, FbVoltId = 112;
     double _cpu, _ram, _volt, _rssi, _temp;
     public double Cpu  { get => _cpu;  set { _cpu = value;  Raise(nameof(CpuText)); } }
     public double Ram  { get => _ram;  set { _ram = value;  Raise(nameof(RamText)); } }
@@ -51,6 +55,15 @@ public class RobotState : System.ComponentModel.INotifyPropertyChanged
     public string VoltText => $"BAT {Volt,5:0.00}V  T {Temp,4:0.0}℃";
     public string TempText => $"TEMP {Temp,4:0.0}℃";
     public string RssiText => $"RSSI {Rssi,5:0} dBm";
+
+    // ── storage (free/total GB on the SD card and USB drive, from the Pi) ──
+    double _diskRootFree, _diskRootTotal, _diskUsbFree, _diskUsbTotal;
+    public double DiskRootFree  { get => _diskRootFree;  set { _diskRootFree = value;  Raise(nameof(DiskRootText)); } }
+    public double DiskRootTotal { get => _diskRootTotal; set { _diskRootTotal = value; Raise(nameof(DiskRootText)); } }
+    public double DiskUsbFree   { get => _diskUsbFree;   set { _diskUsbFree = value;   Raise(nameof(DiskUsbText)); } }
+    public double DiskUsbTotal  { get => _diskUsbTotal;  set { _diskUsbTotal = value;  Raise(nameof(DiskUsbText)); } }
+    public string DiskRootText => _diskRootTotal > 0 ? $"SD CARD {_diskRootFree,4:0.0}G free / {_diskRootTotal,4:0.0}G" : "SD CARD --";
+    public string DiskUsbText  => _diskUsbTotal > 0 ? $"USB     {_diskUsbFree,4:0.0}G free / {_diskUsbTotal,4:0.0}G" : "USB     not detected";
 
     // ── drive ──
     double _speedScale = 1.0;
