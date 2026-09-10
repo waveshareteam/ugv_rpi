@@ -7,3 +7,6 @@ templates/pictures/photo*
 templates/videos/video*
 yolov8n.pt
 yolov7.pt
+yolov8*-world*.pt
+known_objects.json
+world_embeddings.pkl

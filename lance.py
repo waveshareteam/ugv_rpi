@@ -44,7 +44,8 @@ Available actions:
 - auto_drive params: {"on": true|false}  Follow-the-line auto mode on or off.
 - avoidance params: {"on": true|false}  LIDAR obstacle avoidance on or off.
 - gimbal    params: {"dir": "up|down|left|right"}  Tilt/pan the camera head.
-- detect    params: {}  Look through the camera and describe what you see in front of the robot.
+- detect    params: {}  LOOK through the camera and NAME the objects in front of the robot. Use for: "what do you see", "detect", "look at", "identify", "what's in front of you", "what is that". NEVER use gimbal for these.
+- learn     params: {"name": "stapler"}  The user TEACHES you a new object they are showing you ("learn that this is a stapler", "this is called a mug", "what you're looking at is a banana"). Add it to your vocabulary so you can recognize it forever.
 - status    params: {"what": "battery|lidar|all"}  Report robot state.
 - chat      params: {}  For greetings, thanks, jokes, or anything with no robot action.
 
@@ -267,6 +268,16 @@ def _detect(robot, params, say):
         return "Something went wrong with my eyes."
 
 
+def _learn(robot, params, say):
+    """Self-learning: teach Lance a new object name so it can recognize it."""
+    name = (params.get("name") or "").strip()
+    if not name:
+        return "What should I learn? Tell me the object's name!"
+    if not hasattr(robot, 'learn_object'):
+        return "I can't learn new things yet, boss!"
+    return robot.learn_object(name)
+
+
 ACTIONS = {
     "drive": _drive,
     "spin": _spin,
@@ -278,6 +289,7 @@ ACTIONS = {
     "avoidance": _avoidance,
     "gimbal": _gimbal,
     "detect": _detect,
+    "learn": _learn,
     "status": _status,
 }
 

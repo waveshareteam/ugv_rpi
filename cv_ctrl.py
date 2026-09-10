@@ -35,6 +35,101 @@ curpath = os.path.realpath(__file__)
 thisPath = os.path.dirname(curpath)
 with open(thisPath + '/config.yaml', 'r') as yaml_file:
     f = yaml.safe_load(yaml_file)
+
+# Seed vocabulary for Lance's open-vocabulary vision (YOLO-World). The COCO-80
+# classes plus a broad list of common household/office objects. Lance self-learns
+# beyond this: learn_object() appends to known_objects.json which persists across
+# restarts. Names are matched by CLIP text embeddings, so synonyms work too.
+DEFAULT_KNOWN_OBJECTS = [
+    # --- COCO-80 ---
+    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck",
+    "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench",
+    "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra",
+    "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
+    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove",
+    "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup",
+    "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange",
+    "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
+    "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse",
+    "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
+    "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier",
+    "toothbrush",
+    # --- kitchen ---
+    "coffee mug", "glass", "plate", "pan", "pot", "kettle", "frying pan",
+    "spatula", "cutting board", "blender", "coffee maker", "water bottle",
+    "thermos", "lunch box", "cereal box", "bread", "bagel", "muffin", "cheese",
+    "yogurt", "eggs", "milk carton", "butter", "jam", "peanut butter", "cereal",
+    "pasta", "rice", "soup", "salad", "fries", "burger", "taco", "sushi",
+    "cookie", "brownie", "pie", "ice cream", "popcorn", "chips", "pretzel",
+    "crackers", "nuts", "candy", "chocolate bar", "salt shaker", "pepper shaker",
+    "sugar bowl", "honey", "syrup", "ketchup", "mustard", "mayonnaise", "vinegar",
+    "olive oil", "spices", "napkin", "paper towel", "aluminum foil", "plastic wrap",
+    "trash can", "recycling bin", "dishwasher", "stove", "grill", "barbecue",
+    "mug", "sponge", "dish rack", "sink faucet",
+    # --- office ---
+    "stapler", "pen", "pencil", "crayon", "marker", "highlighter", "ruler",
+    "eraser", "tape", "sticky note", "notebook", "paper", "folder", "envelope",
+    "calculator", "printer", "scanner", "desk", "whiteboard", "projector",
+    "webcam", "headphones", "earbuds", "speaker", "microphone", "usb drive",
+    "hard drive", "charger", "power strip", "extension cord", "battery",
+    "game controller", "tablet", "smartwatch", "tripod", "drone", "remote control",
+    "camera", "flashlight",
+    # --- furniture / home ---
+    "sofa", "loveseat", "recliner", "armchair", "ottoman", "coffee table",
+    "end table", "nightstand", "dresser", "wardrobe", "bookshelf", "bookcase",
+    "shelf", "cabinet", "drawer", "stool", "mattress", "pillow", "blanket",
+    "comforter", "sheet", "rug", "carpet", "curtain", "blinds", "mirror",
+    "picture frame", "painting", "poster", "alarm clock", "wall clock", "candle",
+    "lamp", "floor lamp", "ceiling fan", "chandelier", "plant", "flower pot",
+    "flower", "globe", "aquarium", "fish tank",
+    # --- tools ---
+    "hammer", "nail", "screw", "screwdriver", "wrench", "pliers", "drill",
+    "saw", "axe", "shovel", "rake", "lawn mower", "ladder", "tape measure",
+    "level", "utility knife", "duct tape", "rope", "chain", "padlock", "key",
+    "keychain", "safety goggles", "work gloves", "hard hat", "tool box",
+    "workbench", "paintbrush", "paint roller", "watering can", "garden hose",
+    "wheelbarrow", "headlamp",
+    # --- toys ---
+    "doll", "action figure", "toy car", "toy train", "lego", "building blocks",
+    "puzzle", "board game", "chess set", "playing cards", "dice", "stuffed animal",
+    "rubber duck", "balloon", "bubbles", "yo-yo", "play-doh", "video game",
+    "game console", "rattle", "pacifier", "baby bottle", "stroller", "crib",
+    "high chair",
+    # --- sports / outdoor ---
+    "soccer ball", "basketball", "football", "volleyball", "baseball",
+    "tennis ball", "golf ball", "golf club", "hockey stick", "hockey puck",
+    "ping pong paddle", "pool cue", "dart", "dartboard", "bowling ball",
+    "fishing rod", "fishing reel", "sled", "ice skates", "roller skates",
+    "scooter", "unicycle", "helmet", "knee pads", "whistle", "stopwatch",
+    "hula hoop", "jump rope", "trampoline", "swing", "slide", "sandbox",
+    "camping tent", "sleeping bag", "campfire", "fire pit", "picnic basket",
+    "cooler", "hiking boots", "duffel bag", "passport", "wallet", "money",
+    # --- clothing / accessories ---
+    "shirt", "t-shirt", "polo shirt", "dress shirt", "blouse", "sweater",
+    "hoodie", "cardigan", "jacket", "coat", "trench coat", "parka", "raincoat",
+    "vest", "blazer", "suit", "bow tie", "scarf", "gloves", "mittens", "hat",
+    "cap", "beanie", "beret", "cowboy hat", "sun hat", "earmuffs", "face mask",
+    "headband", "hair clip", "comb", "brush", "razor", "toothpaste", "dental floss",
+    "mouthwash", "tissue", "toilet paper", "hand sanitizer", "soap", "shampoo",
+    "conditioner", "lotion", "sunscreen", "lip balm", "lipstick", "mascara",
+    "nail polish", "perfume", "cologne", "deodorant", "towel",
+    # --- electronics ---
+    "smartphone", "desktop computer", "monitor", "screen", "television", "router",
+    "modem", "external hard drive", "sd card", "sim card", "headset", "dslr camera",
+    "camcorder", "action camera", "vr headset", "fitness tracker", "e-reader",
+    "kindle", "soundbar", "subwoofer", "turntable", "record player", "vinyl record",
+    "cd", "dvd", "power bank", "solar panel", "light bulb", "led bulb", "night light",
+    "laser pointer", "tv remote", "smart speaker", "smart bulb", "security camera",
+    "baby monitor", "walkie talkie",
+    # --- fruit / veg / drink extras ---
+    "grapes", "strawberries", "blueberries", "watermelon", "pineapple", "mango",
+    "peach", "pear", "lemon", "lime", "tomato", "potato", "onion", "garlic",
+    "cucumber", "bell pepper", "avocado", "corn", "lettuce", "spinach", "mushroom",
+    "pumpkin", "sweet potato", "zucchini", "eggplant", "canned food", "jar", "can",
+    "soda can", "juice box", "coffee", "tea", "smoothie", "beer bottle",
+    "wine bottle", "soda bottle", "coconut", "cherries", "melon", "chili pepper",
+    "pickle", "olive",
+]
     
 # Configure logging
 logging.basicConfig(filename='Log.txt', 
@@ -177,6 +272,18 @@ class OpencvFuncs():
             logging.info("YOLOv8 loaded successfully")
         except Exception as e:
             logging.warning("YOLOv8 not available, falling back to MobileNet: %s", e)
+
+        # Open-vocabulary learning (YOLO-World): knows COCO + every object Lance
+        # has been taught. Self-learns: learn_object() adds names to the persistent
+        # known_objects.json vocabulary and re-embeds only the new name.
+        self.known_objects_path = os.path.join(thisPath, 'known_objects.json')
+        self.world_embeddings_path = os.path.join(thisPath, 'world_embeddings.pkl')
+        self.known_objects, self.object_facts = self._load_known_objects()
+        self.world_model = None  # lazy-loaded YOLO-World (heavy; background warmup)
+        self.world_ready = False
+        self._world_lock = threading.Lock()
+        self._world_warmup_started = False
+        self._start_world_warmup()
 
         # mediapipe
         self.mpDraw = mp.solutions.drawing_utils
@@ -1371,15 +1478,222 @@ class OpencvFuncs():
             logging.error(f"lance_handle failed: {e}")
             return "Sorry boss, my brain is having a moment."
 
+    # ------------------------------------------------------------------
+    # Open-vocabulary vision: self-learning + internet knowledge
+    # ------------------------------------------------------------------
+
+    def _load_known_objects(self):
+        """Load the persistent object vocabulary + facts, seeding it if missing."""
+        facts = {}
+        if os.path.exists(self.known_objects_path):
+            try:
+                with open(self.known_objects_path, 'r', encoding='utf-8') as fp:
+                    data = json.load(fp)
+                objs = [str(x).strip().lower() for x in data.get('objects', []) if str(x).strip()]
+                facts = data.get('facts') or {}
+                if objs:
+                    return objs, facts
+            except Exception as e:
+                logging.warning("known_objects.json unreadable: %s", e)
+        objs = list(dict.fromkeys(DEFAULT_KNOWN_OBJECTS))
+        self._save_known_objects(objs, facts)
+        return objs, facts
+
+    def _save_known_objects(self, objs=None, facts=None):
+        try:
+            with open(self.known_objects_path, 'w', encoding='utf-8') as fp:
+                json.dump({'objects': objs if objs is not None else self.known_objects,
+                           'facts': facts if facts is not None else self.object_facts},
+                          fp, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logging.warning("failed to save known_objects.json: %s", e)
+
+    def _start_world_warmup(self):
+        """Load YOLO-World in the background so it's ready when asked. Safe to fail."""
+        if self._world_warmup_started:
+            return
+        self._world_warmup_started = True
+        try:
+            threading.Thread(target=self._ensure_world_model, args=(True,), daemon=True).start()
+        except Exception as e:
+            logging.warning("world warmup thread failed to start: %s", e)
+
+    def _ensure_world_model(self, block=True):
+        """Load YOLO-World and set its vocabulary from known_objects.json.
+
+        Embeddings are cached to world_embeddings.pkl, so only unseen names get
+        re-embedded (CLIP text encoder is internet-trained: it already knows the
+        visual meaning of thousands of object words). Returns True when ready.
+        """
+        with self._world_lock:
+            if self.world_model is not None and self.world_ready:
+                return True
+            try:
+                if self.world_model is None:
+                    from ultralytics import YOLO
+                    self.world_model = YOLO('yolov8s-worldv2.pt')  # open-vocabulary
+                wm = self.world_model.model  # nn WorldModel
+                cache = {}
+                if os.path.exists(self.world_embeddings_path):
+                    try:
+                        cache = torch.load(self.world_embeddings_path, map_location='cpu', weights_only=True)
+                    except Exception as e:
+                        logging.warning("embedding cache unreadable: %s", e)
+                names = self.known_objects
+                missing = [n for n in names if n not in cache]
+                if missing:
+                    feats = wm.get_text_pe(missing, batch=80)  # builds/caches the CLIP encoder
+                    for n, f in zip(missing, feats[0]):
+                        cache[n] = f.detach().cpu().float()
+                    try:
+                        torch.save(cache, self.world_embeddings_path)
+                    except Exception as e:
+                        logging.warning("embedding cache save failed: %s", e)
+                vecs = torch.stack([cache[n].float() for n in names])  # (n, d)
+                wm.txt_feats = vecs.unsqueeze(0)  # (1, n, d) — same path set_classes uses
+                wm.model[-1].nc = len(names)
+                self.world_model.model.names = {i: n for i, n in enumerate(names)}
+                self.world_model.predictor = None  # force predictor to re-read names
+                self.world_ready = True
+                logging.info("YOLO-World ready: %d known objects (internet-trained vocabulary)", len(names))
+                return True
+            except Exception as e:
+                logging.warning("YOLO-World load failed (vision falls back to YOLOv8 COCO): %s", e)
+                self.world_ready = False
+                return False
+
+    def _reembed_new(self, new_names):
+        """Embed only the newly learned names and append to the existing text features.
+        Caller must hold self._world_lock and world_ready must be True."""
+        wm = self.world_model.model
+        cache = {}
+        if os.path.exists(self.world_embeddings_path):
+            try:
+                cache = torch.load(self.world_embeddings_path, map_location='cpu', weights_only=True)
+            except Exception:
+                cache = {}
+        missing = [n for n in new_names if n not in cache]
+        if missing:
+            feats = wm.get_text_pe(missing, batch=80)
+            for n, f in zip(missing, feats[0]):
+                cache[n] = f.detach().cpu().float()
+            try:
+                torch.save(cache, self.world_embeddings_path)
+            except Exception:
+                pass
+        new_vecs = torch.stack([cache[n].float() for n in new_names])  # (m, d)
+        wm.txt_feats = torch.cat([wm.txt_feats, new_vecs.unsqueeze(0)], dim=1)
+        wm.model[-1].nc = len(self.known_objects)
+        self.world_model.model.names = {i: n for i, n in enumerate(self.known_objects)}
+        self.world_model.predictor = None  # force predictor to re-read names
+
+    def _fetch_fact(self, name, max_chars=110):
+        """Look up what `name` is on Wikipedia (free public API, no key).
+        Returns a short spoken fact or '' on failure. Result is cached in
+        known_objects.json so it survives restarts and needs no repeat lookups."""
+        if name in self.object_facts:
+            return self.object_facts[name]
+        import urllib.parse
+        import urllib.request
+        try:
+            slug = urllib.parse.quote(name.replace(' ', '_'))
+            req = urllib.request.Request(
+                'https://en.wikipedia.org/api/rest_v1/page/summary/' + slug,
+                headers={'User-Agent': 'UGV-Lance/1.0 (educational home robot)'},
+            )
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+            extract = (data.get('extract') or '').strip()
+            if extract:
+                extract = extract[:max_chars].rsplit(' ', 1)[0] + '.'
+                self.object_facts[name] = extract
+                self._save_known_objects()
+                return extract
+        except Exception as e:
+            logging.info("wiki lookup failed for %s: %s", name, e)
+        return ''
+
+    def learn_object(self, name):
+        """Self-learning: add an object to Lance's permanent vocabulary.
+
+        Once learned, YOLO-World can recognize it immediately (its CLIP text
+        encoder understands the word from internet-scale training). The name is
+        persisted to known_objects.json and a Wikipedia fact is fetched so Lance
+        can also say something true about the object. Returns the spoken reply.
+        """
+        name = ' '.join(str(name or '').strip().lower().split())
+        if not name:
+            return "Tell me what object to learn!"
+        with self._world_lock:
+            if name in self.known_objects:
+                already = True
+            else:
+                already = False
+                self.known_objects.append(name)
+                self._save_known_objects()
+            if self.world_ready and not already:
+                try:
+                    self._reembed_new([name])
+                except Exception as e:
+                    logging.warning("incremental embed failed for %s: %s", name, e)
+        if already:
+            return "I already know " + name + " — I'll keep an eye out for it."
+        fact = self._fetch_fact(name)
+        if fact:
+            return "Learned! A " + name + " — " + fact + " I'll recognize it from now on."
+        return "Learned! From now on I'll recognize a " + name + "."
+
     def detect_scene(self):
-        """Use the latest captured frame to run YOLOv8 detection.
+        """Use the latest captured frame to run open-vocabulary detection.
         Returns a human-readable summary string of what's in front of the camera.
         """
         frame = getattr(self, '_latest_raw_frame', None)
         if frame is None:
             return "I can't see anything right now — the camera isn't responding."
 
-        # Run YOLOv8 detection if available
+        # Open-vocabulary YOLO-World: COCO-80 + every learned/taught object.
+        # Uses a lower confidence bar since open-vocabulary scores run cooler.
+        if self.world_model is not None and getattr(self, 'world_ready', False):
+            try:
+                results = self.world_model(frame, verbose=False, conf=0.15)
+                found = []
+                for r in results:
+                    for box in r.boxes:
+                        cls_id = int(box.cls[0])
+                        conf = float(box.conf[0])
+                        name = self.world_model.names.get(cls_id, f"class_{cls_id}")
+                        found.append((name, conf))
+
+                self.last_detections = [
+                    {'name': n, 'confidence': c, 'box': list(map(int, box.xyxy[0]))}
+                    for r in results for box in r.boxes
+                    for n in [self.world_model.names.get(int(box.cls[0]), "unknown")]
+                    for c in [float(box.conf[0])]
+                ]
+
+                if not found:
+                    return "I don't see anything I recognize right now."
+
+                from collections import Counter
+                counts = Counter(name for name, _ in found)
+                top = counts.most_common(10)
+                parts = []
+                for name, count in top:
+                    if count == 1:
+                        parts.append(f"a {name}")
+                    else:
+                        parts.append(f"{count} {name}s")
+                summary = ", ".join(parts)
+                # Attach a cached internet fact about the main object, if we have one
+                fact = ''
+                if top and top[0][0] in self.object_facts:
+                    fact = ' ' + self.object_facts[top[0][0]]
+                return f"I can see: {summary}.{fact}"
+
+            except Exception as e:
+                logging.error("world detect error, falling back: %s", e)
+
+        # Run YOLOv8 COCO detection if available
         if self.yolo_model is not None:
             try:
                 results = self.yolo_model(frame, verbose=False, conf=0.3)
