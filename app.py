@@ -1413,6 +1413,18 @@ def handle_socket_cmd(message):
         threading.Thread(target=update_data_websocket_single,
                          daemon=True).start()
 
+
+@socketio.on('request_data', namespace='/ctrl')
+def handle_request_data(*_args):
+    """Web UI and desktop clients ask for an immediate telemetry snapshot on
+    connect; without this handler they'd wait up to the 5s update loop tick."""
+    try:
+        threading.Thread(target=update_data_websocket_single,
+                         daemon=True).start()
+    except Exception as e:
+        print("Error handling request_data:", e)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Version / product helpers
 # ─────────────────────────────────────────────────────────────────────────────
