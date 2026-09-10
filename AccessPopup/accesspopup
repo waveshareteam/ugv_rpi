@@ -1,6 +1,6 @@
 #!/bin/bash
-#version 0.8-3
-#date 23 Jan 2024
+#version 0.8-6
+#date 12 July 2024
 #Copyright Graeme Richards - RaspberryConnect.com
 #Released under the GPL3 Licence (https://www.gnu.org/licenses/gpl-3.0.en.html)
 
@@ -17,7 +17,7 @@ ap_pw='1234567890'
 ap_ip='192.168.50.5/24'
 ap_gate='192.168.50.254'
 
-#If wifi is disbaled in Network Manager, then enable it automaticaly.
+#If wifi is disabled in Network Manager, then enable it automaticaly.
 #if set to 'n' then wifi will stay off and no AccessPoint will be generated or Network Connection will be available.
 re_enable_wifi='y'
 
@@ -33,8 +33,12 @@ ssidChk=('NoSSid')
 
 
 #Function is NM installed and running
-if systemctl -all list-unit-files NetworkManager.service | grep "could not be found" >/dev/null 2>&1 ;then
-	if systemctl -all list-unit-files dhcpcd.service | grep "(running)" >/dev/null 2>&1 ;then
+chknm="$(systemctl is-active NetworkManager.service)"
+stat=$?
+if [ $stat -ne 0 ] ; then
+	chkdh="$(systemctl is-active dhcpcd.service)"
+	stat=$?
+	if [ $stat -ne 0 ] ; then
 		echo "This script is not compatible with the network setup."
 		echo "Please use the dhcpcd version available at raspberryconnect.com"
 	else
@@ -48,13 +52,13 @@ saved_profiles()
 {
 ap_profile=()
 nw_profile=()
-n="$(nmcli -t -f AUTOCONNECT-PRIORITY,NAME,TYPE c | sort -nr)"
+n="$(nmcli -t -f AUTOCONNECT-PRIORITY,NAME,TYPE connection | sort -nr)"
 n="$(awk 1 ORS=':' <(echo "$n"))" #Replaces LF with : Delimeter
 readarray -d ':' -t profiles < <(printf "%s" "$n") #Change to array output
-if [ -n profiles ]; then
+if [ -n $profiles ]; then #a profile exists
 	for (( c=0; c<=${#profiles[@]}; c+=3 )) #array of profiles
 	do
-		if [ -n "${profiles[$c+1]}" ] ; then
+		if [ -n "${profiles[$c+1]}" ] && [[ ${profiles[$c+0]} -gt "-900" ]]; then
 			mode="$(nmcli connection show "${profiles[$c+1]}" | grep 'wireless.mode')" #show mode infurstructure, AP
 			readarray -d ':' -t mode < <(printf "%s" "$mode")
 			mode2="$(echo "${mode[1]}" | sed 's/[[:blank:]]//g')"
@@ -67,6 +71,8 @@ if [ -n profiles ]; then
 	done
 fi
 }
+#change priority 
+#sudo nmcli con mod AccessPopup connection.autoconnect-priority 0
 
 #Function what is the current active wifi
 active_wifi()
@@ -150,11 +156,11 @@ echo "Duplicates are for each Antenna. Usually 2.4ghz and 5ghz. Blanks or \x00 a
 echo ""
 for (( c=0; c<=${#profiles[@]}; c+=3 ))
 do
-	if [ -n "${profiles[$c+1]}" ] ;then
+	if [ -n "${profiles[$c+1]}" ] ;then #profile is not empty
 		if  [ ! "${profiles[$c+1]}" = "lo" ] && [ ! "${profiles[$c+1]:0:7}" = "Wired c" ] ;then
-			idssid="$(nmcli -t connection show "${profiles[$c+1]}" | grep "wireless.ssid")"			
+			idssid="$(nmcli -t connection show "${profiles[$c+1]}" | grep "wireless.ssid")"
 			for i in "${ssidlst[@]}"; do
-				if [[ "${i:7}" == "${idssid:21}" ]]; then
+				if [[ "${i:7}" == "${idssid:21}" ]] && [[ -n $idssid ]]; then
 					ssidChk+=("${profiles[$c+1]}")
 					break
 				fi
@@ -164,8 +170,6 @@ do
 done
 if [ "${#ssidChk[@]}" -eq 0 ]; then
 	ssidChk+='NoSSid'
-else
-	echo "Known Profiles in range:${ssidChk[@]}"
 fi
 if [ "${ssidChk[0]}" = 'NoSSid' ] && [ $iwer -ne 0 ] ; then
 	echo -e "\nNETWORK ISSUE:"
@@ -273,20 +277,21 @@ ap_new_profile()
 {
 #Create a AP profile
 nmcli device wifi hotspot ifname $wdev0 con-name "$ap_profile_name" ssid "$ap_ssid" band bg channel 6 password "$ap_pw" >/dev/null 2>&1
-nmcli connection mod "$ap_profile_name" ipv4.method shared ipv4.addr "$ap_ip" ipv4.gateway "$ap_gate" >/dev/null 2>&1
+nmcli connection modify "$ap_profile_name" ipv4.method shared ipv4.addr "$ap_ip" ipv4.gateway "$ap_gate" 802-11-wireless-security.group "" 802-11-wireless-security.pairwise "" 802-11-wireless-security.proto "" >/dev/null 2>&1
 ap_profile+="$ap_profile_name"
-nmcli con reload
+nmcli connection reload
 }
 
 #Main
 echo "RaspberryConnect.com - AccessPopup: Automated Access Point."
-isnm="$( systemctl status NetworkManager | grep '(running)' )"
-wifi_is_off
-if echo "$isnm" | grep -v "(running)" ;then  >/dev/null 2>&1; #NM not running
+isnm="$(systemctl is-active NetworkManager.service)"
+stat=$?
+if [ $stat -ne 0 ] ; then #NM not running
 	echo "Network Manager is required but is not the active system network service"
 	echo "Unable to continue."
 	exit 1
 fi
+wifi_is_off
 active_wifi
 is_active_ap
 echo "The active profile is $active"
@@ -348,7 +353,7 @@ if [ "$active_ap" = "y" ] && [ ! "$active" = "$ap_profile_name" ]; then
 fi
 
 #check if timer is active. Will have been disabled if arg -a used.
-tup="$(systemctl list-timers | grep 'AccessPopup.timer')"
+tup="$(systemctl list-timers AccessPopup.timer | grep 'AccessPopup.timer')"
 if [ -z "$tup" ];then
 	systemctl start AccessPopup.timer
 fi

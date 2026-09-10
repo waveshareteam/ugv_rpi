@@ -31,6 +31,13 @@ from picamera2.encoders import H264Encoder, Encoder
 from picamera2.outputs import FfmpegOutput
 import sys
 
+# libraries for oak camera (upstream OAK-D support; optional dependency)
+try:
+    import depthai as dai
+except ImportError:
+    dai = None
+
+# config file.
 curpath = os.path.realpath(__file__)
 thisPath = os.path.dirname(curpath)
 with open(thisPath + '/config.yaml', 'r') as yaml_file:
@@ -349,6 +356,8 @@ class OpencvFuncs():
         # Never open /dev/ttyAMA0 here - that is the ESP32 link, and a second
         # handle corrupts base_ctrl's serial stream (drive stops responding).
         self.lidar_serial = None
+        self.csi_camera_connected = False
+        self.oak_camera_connected = False
 
         # Initialize USB camera if connected
         if self.usb_camera_connected:
@@ -372,13 +381,33 @@ class OpencvFuncs():
                 self.picam2 = Picamera2()
                 self.picam2.configure(self.picam2.create_video_configuration(main={"format": 'XRGB8888', "size": (f['video']['default_res_w'], f['video']['default_res_h'])}))
                 self.picam2.start()
+                self.csi_camera_connected = True
             except Exception as e:
                 logging.error(f"Error initializing CSI camera: {e}")
                 self.picam2 = None  # Handle failure to initialize CSI camera
+                self.csi_camera_connected = False
 
         # Ensure there is always a fallback when accessing the camera
         if not self.camera and not hasattr(self, 'picam2'):
             logging.error("No camera initialized.")
+
+        # OAK camera init: USB -> CSI -> OAK-D fallback chain (upstream)
+        if not self.usb_camera_connected and not self.csi_camera_connected:
+            try:
+                self.pipeline = dai.Pipeline()
+                self.camRgb = self.pipeline.createColorCamera()
+                self.camRgb.setBoardSocket(dai.CameraBoardSocket.RGB)
+                self.camRgb.setInterleaved(False)
+                self.camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_720_P)
+                self.xout = self.pipeline.createXLinkOut()
+                self.xout.setStreamName("video")
+                self.camRgb.video.link(self.xout.input)
+                self.device = dai.Device(self.pipeline)
+                self.output_queue = self.device.getOutputQueue(name="video", maxSize=8, blocking=False)
+                self.oak_camera_connected = True
+            except Exception as e:
+                logging.error(f"OAK camera init failed: {e}")
+                self.oak_camera_connected = False
 
     def info_scale(self):
         # Implementation for info_scale
@@ -396,8 +425,20 @@ class OpencvFuncs():
                     self.camera.release()
                     time.sleep(1)
                     self.camera = cv2.VideoCapture(0)
-            else:
+            elif self.csi_camera_connected:
                 input_frame = self.picam2.capture_array()
+            elif self.oak_camera_connected:
+                input_frame = self.output_queue.get().getCvFrame()
+                input_frame = cv2.resize(input_frame, (640, 480))
+            else:
+                input_frame = 255 * np.ones((480, 640, 3), dtype=np.uint8)
+                cv2.putText(input_frame, f"camera read failed... \nusb - csi - oak", 
+                            (round(0.05*640), round(0.1*640 + 5 * 13)), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.369, (0, 0, 0), 1)
+                ret, buffer = cv2.imencode('.jpg', input_frame, [int(cv2.IMWRITE_JPEG_QUALITY), self.video_quality])
+                input_frame = buffer.tobytes()
+                time.sleep(1)
+                return input_frame
         except Exception as e:
             print(f"[cv_ctrl.frame_process] error: {e}")
             input_frame = 255 * np.ones((480, 640, 3), dtype=np.uint8)

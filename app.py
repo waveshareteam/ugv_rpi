@@ -1629,4 +1629,5 @@ if __name__ == "__main__":
                      name="camera-capture").start()
     print("[video] Camera capture thread started – warming up…")
 
+    # run the main web app
     socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)

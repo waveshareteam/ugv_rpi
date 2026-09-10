@@ -165,6 +165,11 @@ sudo usermod -aG dialout $USER
 echo "# Audio Config."
 sudo cp -v -f /home/$(logname)/ugv_rpi/asound.conf /etc/asound.conf
 
+# OAK Config
+sudo cp -v -f /home/$(logname)/ugv_rpi/99-dai.rules /etc/udev/rules.d/99-dai.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+
 echo "Setup completed. Please to reboot your Raspberry Pi for the changes to take effect."
 
 echo "Use the command below to run app.py onboot."
