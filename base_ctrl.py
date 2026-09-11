@@ -21,24 +21,116 @@ class ReadLine:
 		self.sensor_data = []
 		self.sensor_list = []
 		try:
-			self.sensor_data_ser = serial.Serial(glob.glob('/dev/ttyUSB*')[0], 115200)
-			print("/dev/ttyUSB* connected succeed")
+			# Ultrasonic sensor (if any) lives on a ttyUSB that is NOT the lidar
+			# adapter.  When the D500 kit's CP2102 is the only ttyUSB, skip this
+			# entirely so we never contend with the lidar reader on the same port.
+			lidar_port = self._pick_lidar_port()
+			others = [p for p in glob.glob('/dev/ttyUSB*') if p != lidar_port]
+			if others:
+				self.sensor_data_ser = serial.Serial(others[0], 115200)
+				print("/dev/ttyUSB* connected succeed")
+			else:
+				self.sensor_data_ser = None
 		except:
 			self.sensor_data_ser = None
 		self.sensor_data_max_len = 51
 
-		try:
-			self.lidar_ser = serial.Serial(glob.glob('/dev/ttyACM*')[0], 230400, timeout=1)
-			print("/dev/ttyACM* connected succeed")
-		except:
-			self.lidar_ser = None
+		self.open_lidar_serial()
 		self.ANGLE_PER_FRAME = 12
 		self.HEADER = 0x54
 		self.lidar_angles = []
 		self.lidar_distances = []
 		self.lidar_angles_show = []
 		self.lidar_distances_show = []
+		self.lidar_scan_time = 0.0
 		self.last_start_angle = 0
+		# 1-degree occupancy bins: (distance_mm, timestamp).  /lidar_points
+		# serves these (last 3 s) so the radar shows a dense, smoothed picture
+		# built from several revolutions instead of one sparse partial scan.
+		self.lidar_bins = [(0.0, 0.0) for _ in range(360)]
+		# Rolling read buffer + bookkeeping for the non-blocking scanner.
+		self._lbuf = bytearray()
+		self._last_rx = 0.0
+		# Wire-health counters: bytes arriving vs valid frames parsed.  Rates
+		# are computed over a 2 s sliding window; the UI uses them to tell
+		# "sensor silent" from "wire alive but garbage" from "streaming".
+		self._rate_stamp = time.time()
+		self._rate_bytes = 0
+		self._rate_frames = 0
+		self.rx_bps = 0.0
+		self.frames_per_s = 0.0
+
+	def _pick_lidar_port(self):
+		"""The D500 kit's adapter is a CP210x bridge on /dev/ttyUSB*; older
+		UART-wired kits stream through the ESP32 base board on /dev/ttyACM*.
+		Prefer the USB bridge, fall back to the base board."""
+		usb = sorted(glob.glob('/dev/ttyUSB*'))
+		acm = sorted(glob.glob('/dev/ttyACM*'))
+		return usb[0] if usb else (acm[0] if acm else None)
+
+	def _pick_lidar_baud(self, port):
+		"""Direct CP2102 adapter (ttyUSB*) carries the D500's native stream at
+		921600 baud; the ESP32 base board (ttyACM*) relays it at 230400."""
+		return 921600 if port.startswith('/dev/ttyUSB') else 230400
+
+	def open_lidar_serial(self):
+		"""(Re)open the lidar serial port on the best available device.
+		DTR/RTS are left asserted: on the D500 kit's CP2102 adapter the DTR
+		line drives the sensor's motor PWM, so a de-asserted DTR can stop
+		the motor and starve the stream."""
+		port = self._pick_lidar_port()
+		if port is None:
+			print("[lidar] no serial device for lidar")
+			self.lidar_ser = None
+			return
+		try:
+			if self.lidar_ser is not None:
+				try:
+					self.lidar_ser.close()
+				except Exception:
+					pass
+				self.lidar_ser = None
+			baud = self._pick_lidar_baud(port)
+			s = serial.Serial(port, baud, timeout=1, dsrdtr=False, rtscts=False)
+			try:
+				s.dtr = True
+				s.rts = True
+			except Exception:
+				pass
+			self.lidar_ser = s
+			self.last_start_angle = 0
+			self._lbuf.clear()
+			print(f"lidar serial connected succeed on {port} @ {baud}")
+		except Exception as e:
+			print(f"[lidar] open failed {port}: {e}")
+			self.lidar_ser = None
+
+	def kick_lidar(self):
+		"""Pulse the serial DTR line to reset a sensor MCU that has gone
+		silent-but-busy (STL-19P on CP210x adapters where DTR = reset).
+		Safe when DTR is not wired: it just idles the line."""
+		print("[lidar] kicking sensor: DTR pulse")
+		try:
+			port = self._pick_lidar_port()
+			if self.lidar_ser is not None:
+				try:
+					self.lidar_ser.close()
+				except Exception:
+					pass
+				self.lidar_ser = None
+			if port:
+				s = serial.Serial(port, self._pick_lidar_baud(port), timeout=0.2, dsrdtr=False, rtscts=False)
+				try:
+					s.dtr = True
+					time.sleep(0.25)
+					s.dtr = False
+				except Exception:
+					pass
+				s.close()
+			time.sleep(1.0)   # give the sensor a moment to boot
+		except Exception as e:
+			print(f"[lidar] kick failed: {e}")
+		self.open_lidar_serial()
 
 	def readline(self):
 		i = self.buf.find(b"\n")
@@ -102,30 +194,118 @@ class ReadLine:
 		return start_angle
 
 	def lidar_data_recv(self):
-		if self.lidar_ser == None:
+		"""Pump the lidar stream for up to ~100 ms and publish whatever is new.
+
+		The wire from this kit is marginal, so bytes frequently arrive corrupted;
+		the old reader blocked until a perfect 360-degree wrap and could spin for
+		many seconds on garbage (radar "randomly" stops and never restarts).  This
+		scanner instead:
+		  - scans a rolling buffer for 0x54 0x2C frame headers (self-resyncing),
+		  - validates each frame (FSYNC + angle ordering + plausibility) and
+		    drops corrupt ones,
+		  - stamps every parsed point into 1-degree occupancy bins,
+		  - publishes the last partial scan after 2.5 s without a clean wrap so
+		    the UI keeps moving on a degraded wire.
+		Returns quickly; call in a loop from the reader thread.
+		"""
+		if self.lidar_ser is None:
 			return
 		try:
-			while True:
-				self.header = self.lidar_ser.read(1)
-				if self.header == b'\x54':
-					# Read the rest of the data
-					data = self.header + self.lidar_ser.read(46)
-					hex_data = [int(hex(byte), 16) for byte in data]
-					start_angle = self.parse_lidar_frame(hex_data)
-					if self.last_start_angle > start_angle:
-						break
-					self.last_start_angle = start_angle
-				else:
-					self.lidar_ser.flushInput()
+			t_now = time.time()
+			# Rate window first, so a disconnected port still decays to zero
+			# (the reader loop calls this every ~10 ms regardless).
+			if t_now - self._rate_stamp >= 2.0:
+				dt = t_now - self._rate_stamp
+				self.rx_bps = self._rate_bytes / dt
+				self.frames_per_s = self._rate_frames / dt
+				self._rate_bytes = 0
+				self._rate_frames = 0
+				self._rate_stamp = t_now
+			# Pull whatever arrived recently into the rolling buffer.
+			if self.lidar_ser.in_waiting > 0:
+				chunk = self.lidar_ser.read(min(self.lidar_ser.in_waiting, 8192))
+				self._lbuf.extend(chunk)
+				self._rate_bytes += len(chunk)
+				if len(self._lbuf) > 65536:
+					del self._lbuf[:16384]
+				self._last_rx = t_now
+			elif t_now - self._last_rx > 2.0 and self._lbuf:
+				# Port went silent mid-frame: drop partial bytes so the next
+				# real packet is not mis-aligned by stale leading garbage.
+				self._lbuf.clear()
 
-			self.last_start_angle = start_angle
-			self.lidar_angles_show = self.lidar_angles.copy()
-			self.lidar_distances_show = self.lidar_distances.copy()
-			self.lidar_angles.clear()
-			self.lidar_distances.clear()
+			# Harvest every complete valid frame currently in the buffer.
+			consume = 0
+			while True:
+				i = self._lbuf.find(b'\x54\x2C', consume)
+				if i < 0 or len(self._lbuf) - i < 47:
+					break
+				frame = bytes(self._lbuf[i:i+47])
+				if not self._frame_valid(frame):
+					consume = i + 1          # false header - resync one byte on
+					continue
+				start_angle = self.parse_lidar_frame(list(frame))
+				self._stamp_bins(frame)
+				self._rate_frames += 1
+				consume = i + 47
+				# Wrap detected: start angle went backwards -> full revolution.
+				if self.last_start_angle > start_angle:
+					self.lidar_angles_show = self.lidar_angles.copy()
+					self.lidar_distances_show = self.lidar_distances.copy()
+					self.lidar_scan_time = t_now
+					self.lidar_angles.clear()
+					self.lidar_distances.clear()
+				self.last_start_angle = start_angle
+			if consume:
+				del self._lbuf[:consume]
+
+			# Degraded wire: no clean wrap for 2.5 s -> publish what we have so
+			# the radar keeps updating instead of freezing on stale data.
+			if self.lidar_angles and t_now - self.lidar_scan_time > 2.5:
+				self.lidar_angles_show = self.lidar_angles.copy()
+				self.lidar_distances_show = self.lidar_distances.copy()
+				self.lidar_scan_time = t_now
+				self.lidar_angles.clear()
+				self.lidar_distances.clear()
 		except Exception as e:
 			print(f"[base_ctrl.lidar_data_recv] error: {e}")
-			self.lidar_ser = serial.Serial(glob.glob('/dev/ttyACM*')[0], 230400, timeout=1)
+			try:
+				self.lidar_ser.close()
+			except Exception:
+				pass
+			self.lidar_ser = None   # reader loop in app.py reconnects
+
+	def _frame_valid(self, f):
+		"""Sanity-check one 47-byte STL-19P packet; rejects wire-corrupted frames."""
+		if f[0] != 0x54 or f[1] != 0x2C:
+			return False
+		start_angle = (f[5] << 8 | f[4]) * 0.01
+		end_angle = (f[43] << 8 | f[42]) * 0.01
+		if start_angle > 360.0 or end_angle > 360.0:
+			return False
+		# End must not lag start by more than the packet's angular span
+		# (12 points x <=0.72 deg nominal, allow generous slop for speed change).
+		if (end_angle - start_angle) % 360.0 > 14.4:
+			return False
+		# Sample count in verlen low nibble must be 12 for this format.
+		if (f[1] & 0x0F) != 12:
+			return False
+		return True
+
+	def _stamp_bins(self, f):
+		"""Write each of the packet's 12 samples into the 1-degree occupancy bins."""
+		start_angle = (f[5] << 8 | f[4]) * 0.01
+		now = time.time()
+		for k in range(12):
+			off = 6 + k * 3
+			dist = f[off] | (f[off + 1] << 8)
+			if dist == 0:
+				continue
+			ang = int((start_angle + k * 0.83333 + 180.0) % 360)
+			old_d, old_t = self.lidar_bins[ang]
+			if now - old_t > 3.0 or dist < old_d or old_d == 0.0:
+				# Fresh cell, or closer reading wins (obstacle safety).
+				self.lidar_bins[ang] = (float(dist), now)
 
 
 class BaseController:
@@ -148,22 +328,32 @@ class BaseController:
 		
 
 	def feedback_data(self):
+		"""Read the latest complete ESP32 telemetry frame.
+
+		The ESP32 emits ~19.5 Hz of \r\n-framed JSON like
+		{"T":1001,"L":0,...,"v":11.84,"odl":..,"odr":..} and may echo
+		drive commands back on the same wire, so lines that are empty,
+		unparseable, or not a T:1001 frame are skipped (logged at debug,
+		never raised).  Returns the freshest frame seen, or the last known
+		one when the sensor is idle.  Never blocks (only reads when the
+		kernel reports bytes waiting).
+		"""
+		latest = None
 		try:
 			while self.rl.s.in_waiting > 0:
-				self.data_buffer = json.loads(self.rl.readline().decode('utf-8'))
-				if 'T' in self.data_buffer:
-					self.base_data = self.data_buffer
-					self.data_buffer = None
-					if self.base_data["T"] == 1003:
-						print(self.base_data)
-						return self.base_data
-			self.rl.clear_buffer()
-			self.data_buffer = json.loads(self.rl.readline().decode('utf-8'))
-			self.base_data = self.data_buffer
-			return self.base_data
+				line = self.rl.readline().strip()
+				if not line or not line.startswith(b"{"):
+					continue
+				try:
+					d = json.loads(line.decode('utf-8'))
+				except Exception:
+					continue
+				if isinstance(d, dict) and d.get('T') == 1001:
+					self.base_data = d
+					latest = d
 		except Exception as e:
-			self.rl.clear_buffer()
 			print(f"[base_ctrl.feedback_data] error: {e}")
+		return latest if latest is not None else self.base_data
 
 
 	def on_data_received(self):
@@ -183,6 +373,15 @@ class BaseController:
 
 
 	def base_json_ctrl(self, input_json):
+		# Motor wiring on this unit is inverted on both channels: the ESP32
+		# drives the wheels backward for positive L/R (and turns mirror).
+		# Mirror the motion space here, at the single choke point every drive
+		# source passes through (web UI, Command Center, avoider, auto-drive),
+		# so +L/+R means forward and left/right follow the UI convention.
+		if input_json.get('T') in (1, 13) and 'L' in input_json and 'R' in input_json:
+			input_json = dict(input_json)
+			input_json['L'] = -input_json['L']
+			input_json['R'] = -input_json['R']
 		self.send_command(input_json)
 
 

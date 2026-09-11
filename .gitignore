@@ -5,3 +5,37 @@ tutorial_en/.ipynb_checkpoints/
 tutorial_cn/.ipynb_checkpoints/
 templates/pictures/photo*
 templates/videos/video*
+yolov8n.pt
+yolov7.pt
+yolov8*-world*.pt
+known_objects.json
+world_embeddings.pkl
+surroundings.json
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Command Center (C#/.NET) build output — binaries, never source
+CommandCenter/bin/
+CommandCenter/obj/
+CommandCenter/.vs/
+
+# Runtime captures and on-Pi backups
+Log.txt
+backup_*/
+
+# Notebook checkpoints and tool state
+.ipynb_checkpoints/
+templates/.ipynb_checkpoints/
+.freebuff/
+
+# Local virtualenvs, vendored third-party trees and downloaded weights
+venv/
+darknet/
+weights/
+
+# Stray scratch files (not project source)
+CAMERA_INIT_IMPROVEMENTS.py
+bt_synth.py
+untitled.md

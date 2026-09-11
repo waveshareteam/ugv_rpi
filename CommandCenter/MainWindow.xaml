@@ -1,0 +1,34 @@
+<Window x:Class="CommandCenter.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:p="clr-namespace:CommandCenter.Panels"
+        Title="UGV Rover — Command Center" Height="780" Width="1280"
+        WindowStartupLocation="CenterScreen" Background="#FF16181C">
+    <Window.Resources>
+        <Style TargetType="TabItem">
+            <Setter Property="Foreground" Value="#FFB0BEC5"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="14,7"/>
+        </Style>
+    </Window.Resources>
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="#FF1B1E23" Padding="14,8">
+            <DockPanel>
+                <TextBlock Text="🤖 UGV ROVER" FontSize="16" FontWeight="Bold" Foreground="#FF8AB4F8" VerticalAlignment="Center"/>
+                <TextBlock Text="  host:" Foreground="#FF78909C" VerticalAlignment="Center" Margin="20,0,4,0"/>
+                <TextBox x:Name="HostBox" Width="170" VerticalAlignment="Center" Background="#FF23262B" Foreground="White" BorderBrush="#FF37474F" Text="http://172.30.136.241:5000"/>
+                <Button x:Name="ConnectBtn" Content="Connect" Style="{StaticResource OpButton}" Click="OnConnect" Width="90"/>
+                <TextBlock x:Name="ConnText" Text="○ OFFLINE" FontWeight="Bold" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                <TextBlock x:Name="LidarWarn" Text="" Foreground="#FFFFB74D" VerticalAlignment="Center" Margin="16,0,0,0"/>
+                <TextBlock Text="Command Center v1.0" Foreground="#FF546E7A" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+            </DockPanel>
+        </Border>
+        <TabControl Background="Transparent" BorderThickness="0">
+            <TabItem Header="🕹 Drive"><p:DrivePanel x:Name="DriveTab"/></TabItem>
+            <TabItem Header="📡 Radar"><p:RadarPanel x:Name="RadarTab"/></TabItem>
+            <TabItem Header="📷 Cameras"><p:CamerasPanel x:Name="CamerasTab"/></TabItem>
+            <TabItem Header="🧠 Learning"><p:LearningPanel x:Name="LearningTab"/></TabItem>
+            <TabItem Header="💬 Lance"><p:ChatPanel x:Name="ChatTab"/></TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

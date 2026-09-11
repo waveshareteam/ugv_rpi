@@ -1054,3 +1054,10 @@ ul.video-list li a:hover div .normal_btn_play::before{background-image: url('./i
         margin: 40px auto;
     }
 }
+/* additional styles */
+.gamepad-status {
+    font-size: 1em;
+    color: #28a745;
+    margin-top: 10px;
+    text-align: center;
+}

@@ -1,0 +1,183 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 800" font-family="Segoe UI, Arial, sans-serif">
+  <rect x="0" y="0" width="1400" height="800" fill="#16181C"/>
+  <text x="30" y="36" fill="#8AB4F8" font-size="22" font-weight="bold">Robot Eyes — 2x SPI TFT + Arduino Uno + Raspberry Pi 5 (wiring schematic)</text>
+
+  <!-- ============ LEGEND ============ -->
+  <g font-size="13">
+    <rect x="30" y="740" width="16" height="16" fill="#E67E22"/>
+    <text x="54" y="753" fill="#DDD">3.3 V</text>
+    <rect x="130" y="740" width="16" height="16" fill="#222" stroke="#777"/>
+    <text x="154" y="753" fill="#DDD">GND</text>
+    <rect x="230" y="740" width="16" height="16" fill="#2ECC71"/>
+    <text x="254" y="753" fill="#DDD">SCK (SPI clock)</text>
+    <rect x="390" y="740" width="16" height="16" fill="#F1C40F"/>
+    <text x="414" y="753" fill="#DDD">MOSI (data)</text>
+    <rect x="520" y="740" width="16" height="16" fill="#3498DB"/>
+    <text x="544" y="753" fill="#DDD">CS (chip select)</text>
+    <rect x="660" y="740" width="16" height="16" fill="#9B59B6"/>
+    <text x="684" y="753" fill="#DDD">DC (data/command)</text>
+    <rect x="820" y="740" width="16" height="16" fill="#95A5A6"/>
+    <text x="844" y="753" fill="#DDD">RST (reset)</text>
+    <text x="980" y="753" fill="#78909C">solid = TFT #1 (left eye) · dashed = TFT #2 (right eye)</text>
+  </g>
+
+  <!-- ============ POWER RAILS ============ -->
+  <!-- 3.3V top rail -->
+  <line x1="400" y1="210" x2="400" y2="52" stroke="#E67E22" stroke-width="3"/>
+  <line x1="400" y1="52" x2="1240" y2="52" stroke="#E67E22" stroke-width="3"/>
+  <text x="760" y="46" fill="#E67E22" font-size="13">3.3 V rail (from Uno 3.3V pin)</text>
+  <!-- GND bottom rail -->
+  <line x1="400" y1="250" x2="400" y2="720" stroke="#222" stroke-width="3"/>
+  <line x1="400" y1="720" x2="1240" y2="720" stroke="#222" stroke-width="3"/>
+  <text x="760" y="714" fill="#999" font-size="13">GND rail (from Uno GND pin)</text>
+
+  <!-- ============ CLOCK + DATA — one dedicated port per display ============ -->
+  <!-- LEFT eye (TFT #1): software SPI on D4 (clock) + D3 (data) -->
+  <line x1="660" y1="540" x2="860" y2="540" stroke="#2ECC71" stroke-width="3"/>
+  <line x1="860" y1="540" x2="860" y2="270" stroke="#2ECC71" stroke-width="3"/>
+  <line x1="860" y1="270" x2="980" y2="270" stroke="#2ECC71" stroke-width="3"/>
+  <text x="700" y="562" fill="#2ECC71" font-size="12">SCK (D4) → TFT1</text>
+  <line x1="660" y1="590" x2="880" y2="590" stroke="#F1C40F" stroke-width="3"/>
+  <line x1="880" y1="590" x2="880" y2="240" stroke="#F1C40F" stroke-width="3"/>
+  <line x1="880" y1="240" x2="980" y2="240" stroke="#F1C40F" stroke-width="3"/>
+  <text x="700" y="612" fill="#F1C40F" font-size="12">MOSI (D3) → TFT1</text>
+  <!-- RIGHT eye (TFT #2): hardware SPI on D13 (clock) + D11 (data) -->
+  <line x1="660" y1="90" x2="700" y2="90" stroke="#2ECC71" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="700" y1="90" x2="700" y2="630" stroke="#2ECC71" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="700" y1="630" x2="980" y2="630" stroke="#2ECC71" stroke-width="3" stroke-dasharray="6 4"/>
+  <text x="705" y="104" fill="#2ECC71" font-size="12">SCK (D13) → TFT2</text>
+  <line x1="660" y1="190" x2="730" y2="190" stroke="#F1C40F" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="730" y1="190" x2="730" y2="600" stroke="#F1C40F" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="730" y1="600" x2="980" y2="600" stroke="#F1C40F" stroke-width="3" stroke-dasharray="6 4"/>
+  <text x="735" y="212" fill="#F1C40F" font-size="12">MOSI (D11) → TFT2</text>
+  <!-- OPTIONAL MISO: enables controller auto-detect on the right eye -->
+  <line x1="660" y1="140" x2="700" y2="140" stroke="#E0A0FF" stroke-width="2" stroke-dasharray="4 4"/>
+  <line x1="700" y1="140" x2="700" y2="520" stroke="#E0A0FF" stroke-width="2" stroke-dasharray="4 4"/>
+  <line x1="700" y1="520" x2="980" y2="520" stroke="#E0A0FF" stroke-width="2" stroke-dasharray="4 4"/>
+  <text x="706" y="162" fill="#E0A0FF" font-size="11">MISO (D12) → right eye MISO</text>
+  <text x="706" y="176" fill="#78909C" font-size="11">OPTIONAL — enables controller auto-detect</text>
+
+  <!-- 3.3V drops (VCC + LED backlight) -->
+  <line x1="990" y1="52" x2="990" y2="90" stroke="#E67E22" stroke-width="3"/>
+  <line x1="990" y1="90" x2="980" y2="90" stroke="#E67E22" stroke-width="3"/>
+  <line x1="1005" y1="52" x2="1005" y2="300" stroke="#E67E22" stroke-width="3"/>
+  <line x1="1005" y1="300" x2="980" y2="300" stroke="#E67E22" stroke-width="3"/>
+  <line x1="990" y1="52" x2="990" y2="450" stroke="#E67E22" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="990" y1="450" x2="980" y2="450" stroke="#E67E22" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="1005" y1="52" x2="1005" y2="660" stroke="#E67E22" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="1005" y1="660" x2="980" y2="660" stroke="#E67E22" stroke-width="3" stroke-dasharray="6 4"/>
+  <!-- GND drops -->
+  <line x1="995" y1="720" x2="995" y2="120" stroke="#222" stroke-width="3"/>
+  <line x1="995" y1="120" x2="980" y2="120" stroke="#222" stroke-width="3"/>
+  <line x1="995" y1="720" x2="995" y2="480" stroke="#222" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="995" y1="480" x2="980" y2="480" stroke="#222" stroke-width="3" stroke-dasharray="6 4"/>
+
+  <!-- ============ PER-DISPLAY LINES ============ -->
+  <!-- CS -->
+  <line x1="660" y1="240" x2="820" y2="240" stroke="#3498DB" stroke-width="3"/>
+  <line x1="820" y1="240" x2="820" y2="150" stroke="#3498DB" stroke-width="3"/>
+  <line x1="820" y1="150" x2="980" y2="150" stroke="#3498DB" stroke-width="3"/>
+  <line x1="660" y1="390" x2="820" y2="390" stroke="#3498DB" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="820" y1="390" x2="820" y2="510" stroke="#3498DB" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="820" y1="510" x2="980" y2="510" stroke="#3498DB" stroke-width="3" stroke-dasharray="6 4"/>
+  <!-- DC -->
+  <line x1="660" y1="290" x2="845" y2="290" stroke="#9B59B6" stroke-width="3"/>
+  <line x1="845" y1="290" x2="845" y2="210" stroke="#9B59B6" stroke-width="3"/>
+  <line x1="845" y1="210" x2="980" y2="210" stroke="#9B59B6" stroke-width="3"/>
+  <line x1="660" y1="440" x2="845" y2="440" stroke="#9B59B6" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="845" y1="440" x2="845" y2="570" stroke="#9B59B6" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="845" y1="570" x2="980" y2="570" stroke="#9B59B6" stroke-width="3" stroke-dasharray="6 4"/>
+  <!-- RST -->
+  <line x1="660" y1="340" x2="870" y2="340" stroke="#95A5A6" stroke-width="3"/>
+  <line x1="870" y1="340" x2="870" y2="180" stroke="#95A5A6" stroke-width="3"/>
+  <line x1="870" y1="180" x2="980" y2="180" stroke="#95A5A6" stroke-width="3"/>
+  <line x1="660" y1="490" x2="870" y2="490" stroke="#95A5A6" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="870" y1="490" x2="870" y2="540" stroke="#95A5A6" stroke-width="3" stroke-dasharray="6 4"/>
+  <line x1="870" y1="540" x2="980" y2="540" stroke="#95A5A6" stroke-width="3" stroke-dasharray="6 4"/>
+
+  <!-- ============ RASPBERRY PI 5 ============ -->
+  <rect x="40" y="70" width="220" height="120" rx="8" fill="#23262B" stroke="#37474F" stroke-width="2"/>
+  <text x="60" y="100" fill="#8AB4F8" font-size="17" font-weight="bold">Raspberry Pi 5</text>
+  <text x="60" y="125" fill="#B0BEC5" font-size="13">Runs pi_eyes.py (YOLO</text>
+  <text x="60" y="143" fill="#B0BEC5" font-size="13">person detection)</text>
+  <text x="60" y="168" fill="#F5BD5F" font-size="13">USB-A port · 5 V / 600 mA</text>
+  <!-- USB cable -->
+  <line x1="260" y1="125" x2="400" y2="125" stroke="#7F8C8D" stroke-width="8"/>
+  <text x="268" y="110" fill="#7F8C8D" font-size="12">USB A→B: power + serial (115200 baud)</text>
+  <text x="268" y="148" fill="#7F8C8D" font-size="12">Pi sees it as /dev/ttyACM0 (or ttyUSB0)</text>
+
+  <!-- ============ ARDUINO UNO ============ -->
+  <rect x="400" y="40" width="260" height="560" rx="8" fill="#0E7490" stroke="#164E63" stroke-width="2"/>
+  <text x="430" y="72" fill="#FFF" font-size="18" font-weight="bold">Arduino UNO</text>
+  <text x="430" y="92" fill="#CFFAFE" font-size="12">(5 V logic out — see level-shift note)</text>
+  <!-- pin labels right (digital) -->
+  <g font-size="12" fill="#E0F7FA">
+    <text x="670" y="94" text-anchor="end">D13</text>
+    <text x="670" y="144" text-anchor="end">D12 (unused)</text>
+    <text x="670" y="194" text-anchor="end">D11</text>
+    <text x="670" y="244" text-anchor="end">D10</text>
+    <text x="670" y="294" text-anchor="end">D9</text>
+    <text x="670" y="344" text-anchor="end">D8</text>
+    <text x="670" y="394" text-anchor="end">D7</text>
+    <text x="670" y="444" text-anchor="end">D6</text>
+    <text x="670" y="494" text-anchor="end">D5</text>
+    <text x="670" y="544" text-anchor="end">D4</text>
+    <text x="670" y="594" text-anchor="end">D3</text>
+  </g>
+  <!-- pin labels left (power) -->
+  <g font-size="12" fill="#E0F7FA" text-anchor="end">
+    <text x="390" y="214">5V</text>
+    <text x="390" y="254">3.3V</text>
+    <text x="390" y="294">GND</text>
+  </g>
+  <!-- pin dots -->
+  <g fill="#A7F3D0">
+    <circle cx="660" cy="90" r="4"/><circle cx="660" cy="140" r="4"/><circle cx="660" cy="190" r="4"/>
+    <circle cx="660" cy="240" r="4"/><circle cx="660" cy="290" r="4"/><circle cx="660" cy="340" r="4"/>
+    <circle cx="660" cy="390" r="4"/><circle cx="660" cy="440" r="4"/><circle cx="660" cy="490" r="4"/>
+    <circle cx="660" cy="540" r="4"/><circle cx="660" cy="590" r="4"/>
+    <circle cx="400" cy="170" r="4"/><circle cx="400" cy="210" r="4"/><circle cx="400" cy="250" r="4"/>
+  </g>
+
+  <!-- optional level shifter note -->
+  <g font-size="12" fill="#78909C">
+    <rect x="700" y="560" width="250" height="70" rx="6" fill="none" stroke="#546E7A" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="712" y="580" fill="#F5BD5F">OPTIONAL: put a 8-ch level shifter</text>
+    <text x="712" y="598" fill="#78909C">(TXS0108E x2 / 74AHCT125 x3) on the 10</text>
+    <text x="712" y="616" fill="#78909C">signal lines if your board is strict 3.3 V</text>
+  </g>
+
+  <!-- ============ TFT #1 — LEFT EYE ============ -->
+  <rect x="980" y="60" width="260" height="280" rx="8" fill="#23262B" stroke="#8AB4F8" stroke-width="2"/>
+  <text x="1000" y="86" fill="#8AB4F8" font-size="15" font-weight="bold">TFT #1 — LEFT EYE</text>
+  <text x="1000" y="104" fill="#78909C" font-size="12">ST7735 1.8″ or ILI9341 2.4″/2.8″</text>
+  <text x="1000" y="120" fill="#5AF78E" font-size="12">own port: D4+D3 (no shared wires)</text>
+  <g font-size="12" fill="#DDD">
+    <text x="972" y="94" text-anchor="end">VCC</text>
+    <text x="972" y="124" text-anchor="end">GND</text>
+    <text x="972" y="154" text-anchor="end">CS</text>
+    <text x="972" y="184" text-anchor="end">RESET</text>
+    <text x="972" y="214" text-anchor="end">DC</text>
+    <text x="972" y="244" text-anchor="end">SDA / MOSI</text>
+    <text x="972" y="274" text-anchor="end">SCK / SCL</text>
+    <text x="972" y="304" text-anchor="end">LED</text>
+  </g>
+  <text x="1010" y="330" fill="#5AF78E" font-size="13">👁 drawn here</text>
+
+  <!-- ============ TFT #2 — RIGHT EYE ============ -->
+  <rect x="980" y="420" width="260" height="280" rx="8" fill="#23262B" stroke="#8AB4F8" stroke-width="2"/>
+  <text x="1000" y="446" fill="#8AB4F8" font-size="15" font-weight="bold">TFT #2 — RIGHT EYE</text>
+  <text x="1000" y="464" fill="#78909C" font-size="12">ST7735 1.8″ or ILI9341 2.4″/2.8″</text>
+  <text x="1000" y="480" fill="#5AF78E" font-size="12">own port: D13+D11 (no shared wires)</text>
+  <g font-size="12" fill="#DDD">
+    <text x="972" y="454" text-anchor="end">VCC</text>
+    <text x="972" y="484" text-anchor="end">GND</text>
+    <text x="972" y="514" text-anchor="end">CS</text>
+    <text x="972" y="544" text-anchor="end">RESET</text>
+    <text x="972" y="574" text-anchor="end">DC</text>
+    <text x="972" y="604" text-anchor="end">SDA / MOSI</text>
+    <text x="972" y="634" text-anchor="end">SCK / SCL</text>
+    <text x="972" y="664" text-anchor="end">LED</text>
+  </g>
+  <text x="1010" y="690" fill="#5AF78E" font-size="13">👁 drawn here</text>
+</svg>
