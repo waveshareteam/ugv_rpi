@@ -65,35 +65,33 @@ public partial class RadarPanel : UserControl
         RadarCanvas.Children.Clear();
 
         double rangeM = RangeSlider.Value;
-        double cx = w / 2, cy = h * 0.94;
-        double maxR = Math.Min(w / 2, h * 0.94) - 8;
+        // Robot at the centre of the canvas; the disc is sized to the smaller dimension so
+        // the whole 360° sweep stays centred in the panel and nothing is clipped.
+        double cx = w / 2, cy = h / 2;
+        double maxR = Math.Min(w, h) / 2 - 20;
+        if (maxR < 8) return;
         double Scale(double meters) => meters / rangeM * maxR;
 
-        static StreamGeometry Ring(double cx, double cy, double r)
-        {
-            var g = new StreamGeometry();
-            using (var ctx = g.Open())
-            {
-                ctx.BeginFigure(new Point(cx - r, cy), false, false);
-                ctx.ArcTo(new Point(cx + r, cy), new Size(r, r), 0, false, SweepDirection.Counterclockwise, true, false);
-            }
-            g.Freeze();
-            return g;
-        }
+        var hudInk = new SolidColorBrush(Color.FromArgb(110, 0x4F, 0xF5, 0xC0));
+        var hudFaint = new SolidColorBrush(Color.FromArgb(45, 0x4F, 0xF5, 0xC0));
 
         // range rings + labels
         for (int i = 1; i <= 3; i++)
         {
             double r = maxR * i / 3;
-            var ring = new Path { Data = Ring(cx, cy, r), Stroke = new SolidColorBrush(Color.FromArgb(70, 0x4F, 0xF5, 0xC0)), StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 4, 3 } };
+            var ring = new Ellipse { Width = r * 2, Height = r * 2, Stroke = new SolidColorBrush(Color.FromArgb(70, 0x4F, 0xF5, 0xC0)), StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 4, 3 } };
+            Canvas.SetLeft(ring, cx - r); Canvas.SetTop(ring, cy - r);
             RadarCanvas.Children.Add(ring);
             var lbl = new TextBlock { Text = $"{rangeM * i / 3:0.#}m", Foreground = new SolidColorBrush(Color.FromArgb(140, 0x4F, 0xF5, 0xC0)), FontSize = 10 };
             Canvas.SetLeft(lbl, cx + 4); Canvas.SetTop(lbl, cy - r - 14);
             RadarCanvas.Children.Add(lbl);
         }
 
-        // forward line
-        RadarCanvas.Children.Add(new Line { X1 = cx, Y1 = cy, X2 = cx, Y2 = cy - maxR, Stroke = new SolidColorBrush(Color.FromArgb(110, 0x4F, 0xF5, 0xC0)), StrokeThickness = 1 });
+        // bearing cross: forward solid, rear/left/right faint
+        RadarCanvas.Children.Add(new Line { X1 = cx, Y1 = cy, X2 = cx, Y2 = cy - maxR, Stroke = hudInk, StrokeThickness = 1 });
+        RadarCanvas.Children.Add(new Line { X1 = cx, Y1 = cy, X2 = cx, Y2 = cy + maxR, Stroke = hudFaint, StrokeThickness = 1 });
+        RadarCanvas.Children.Add(new Line { X1 = cx, Y1 = cy, X2 = cx - maxR, Y2 = cy, Stroke = hudFaint, StrokeThickness = 1 });
+        RadarCanvas.Children.Add(new Line { X1 = cx, Y1 = cy, X2 = cx + maxR, Y2 = cy, Stroke = hudFaint, StrokeThickness = 1 });
 
         // avoidance keep-out wedge (±40°, 0.5 m)
         var wedge = new Path

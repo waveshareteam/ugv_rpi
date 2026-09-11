@@ -10,7 +10,7 @@
         <Border Style="{StaticResource PanelCard}" Grid.Column="0">
             <DockPanel>
                 <DockPanel DockPanel.Dock="Top">
-                    <TextBlock Text="LIDAR RADAR — 0° = forward" Style="{StaticResource SectionTitle}"/>
+                    <TextBlock Text="LIDAR RADAR — 360° view, 0° = forward (up)" Style="{StaticResource SectionTitle}"/>
                     <Button x:Name="AvoidBtn" Content="Disable Avoidance" Style="{StaticResource OpButton}" HorizontalAlignment="Right" Click="OnAvoidToggle"/>
                 </DockPanel>
                 <Border Background="#FF0D0F12" CornerRadius="6" ClipToBounds="True">
@@ -35,7 +35,7 @@
                 <StackPanel>
                     <TextBlock Text="ABOUT" Style="{StaticResource SectionTitle}"/>
                     <TextBlock Style="{StaticResource HudText}" TextWrapping="Wrap"
-                               Text="Red dots are obstacles within range. The dashed wedge is the avoidance keep-out zone. While you drive manually the robot pauses avoidance and resumes automatically a few seconds after you stop."/>
+                               Text="The robot is the marker at the centre; the sweep is a full 360° around it. Red dots are obstacles within range. The dashed wedge is the forward avoidance keep-out zone. While you drive manually the robot pauses avoidance and resumes automatically a few seconds after you stop."/>
                 </StackPanel>
             </Border>
         </DockPanel>
