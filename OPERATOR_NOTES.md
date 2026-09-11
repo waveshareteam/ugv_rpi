@@ -82,3 +82,85 @@ relaunches it). It needs `/tmp/ap.sh` (the SSH askpass helper) to exist.
 conn.js behavior verified in-browser (all transitions): no-camera → amber banner +
 Retry visible; socket drop → red "reconnecting" + overlay; camera ready → banner
 hidden; Retry → POST /retry_camera, button disables, stream re-polled.
+
+## Self-drive subsystem structure (Sep 11 restructure)
+The planner used to be one 630-line `self_drive.py` holding memory, detection
+handling, pursuit and odometry. It is now six modules, each understandable
+alone. Read this before changing anything in the chain:
+
+| module | owns |
+|---|---|
+| `perception.py` | the robot-frame conventions — LIDAR `+180°` offset, camera bearing sign — plus pure scan helpers (`sector_min`, `turn_bias`, `arc_clearance`) and object-label matching |
+| `robot_state.py` | reading live sensors: `LidarScan` (applies the angle fix **once**, at the boundary) and ESP32 wheel odometry |
+| `spatial_memory.py` | the learned occupancy grid + object memory + `surroundings.json` (version 2; v1 maps were rotated 180° and are refused) |
+| `detection_source.py` | which detections the planner sees: the live COCO stream plus a throttled `detect_world()` open-vocabulary top-up |
+| `target_pursuit.py` | the target's state (`set`/`clear`/`observe`/`seen`/`halt`) and the pursuit rules (arrive, aim, veto, sweep) |
+| `self_drive.py` | the thread lifecycle (`warm`/`enable`/`disable`/`pursue`), the tick, the heading choice + veto application, and the `status()` payload |
+
+Rules that keep it that way:
+- **Angles**: only `robot_state.LidarScan.read()` converts raw angles; everything
+downstream (memory, planner, avoider helpers) works in the robot frame
+(0 = forward, + = left). Never subtract `pi` anywhere else — that duplication is
+what produced the 180°-inverted map and the inverted camera bearing.
+- **Callers use transitions, not flag surgery**: `enable()` / `disable()` /
+`pursue(name)` / `clear_target()` / `warm()`. `disable()` is pause + drop target
++ stop thread; the routes, the CLI, Lance and the boot path all call the same
+methods, so "self-drive off" cannot drift between channels.
+- **Memory is read through the planner's shortcuts** (`save_memory`,
+`load_memory`, `clear_memory`) or `planner.memory` for reads.
+- **Changing heading policy** (weights, veto, aim) lands in
+`SelfDriver._choose_heading`; changing what a target *is* lands in
+`target_pursuit.py`.
+
+### The arrival stop, and the three rules it depends on
+Three things had to agree before "drive to the chair" could end in a stop at
+the chair. Each has exactly one home; change them there.
+
+1. **The planner's `halt` outranks the avoider's forward motion** —
+`LidarAvoider._decide` (app.py) checks `_planner_halted()` *before* the EVADE,
+SLOW, post-evade-curve and CRUISE branches and reports the new `HOLD` state.
+Only the `<250 mm` emergency reverse is exempt: it is the only way out of a
+jam, and suppressing it would wedge the robot. Before this, `halt` was honored
+in CRUISE alone, so the 450-700 mm band drove the robot on at 20-35% speed
+*while the planner was saying stop*. `selfdrive_selftest.py` asserts the
+ordering from app.py's syntax tree (it cannot be imported off the Pi).
+2. **The arrival range is the object's own bearing** —
+`target_pursuit.Target.observe(dets, scan)` measures the nearest LIDAR return
+within `TARGET_CONE_DEG` (10°) of the detection's bearing, and treats *no
+return* down that bearing as `OBJ_RANGE_MAX`. It deliberately does not fall
+back to the forward cone: that cone measured whatever was nearest in front — on
+this floor a wall 0.5 m away across +40°..+150° — so arrival used to fire at
+the wall's distance and the robot stopped short. Collision avoidance is the
+avoider's front cone, not this estimate.
+3. **"drive to the X" is read, not guessed** — `lance.parse_pursuit_intent()`
+routes verb + preposition + object straight to `_approach`, before the language
+model is consulted. The model's own prompt advertises "drive towards the
+chair" and it answered that phrase with a two-second forward drive, so the one
+thing the user asked for was the one thing that did not happen. Extend the
+verb/preposition lists there, not the prompt; anything the parser declines
+still goes to the model. Not-objects (directions, measures) and clause breaks
+("…the bin **and then** forward") are excluded on purpose.
+
+4. **Arrival is sticky, and that lives in one place** —
+`target_pursuit.PursuitPolicy.arrival_hold(target)` is the only arrival
+question the planner asks. It returns True for the tick that first reaches the
+object *and* for every tick after, including ones where the object has left the
+camera view — which is exactly what happens once the robot is on top of it.
+Deciding arrival from scratch each tick (`has_arrived`, removed) released halt
+the moment the object left the frame, so the robot arrived, dropped `halt`, and
+drove off again under the `looking for … — sweeping` path. It still releases
+halt when the object is seen again beyond `arrive_m`, so a target that moves
+away is re-approached rather than frozen forever. `Target.release_halt`
+(unused) was deleted with it. Live proof: `arrived`, `halt=true`,
+`avoidance_state=HOLD`, wheel odometry frozen for 20 s with `seen=false`.
+
+Measured floor geometry at the last verification (robot stationary): straight
+ahead open to 1439 mm; a wall 495-760 mm across +40°..+150°; ~1150 mm to the
+right. That left wall is what held the old front-cone reading at ~580 mm, which
+is also why the SLOW band was the state that mattered.
+
+Note on `/send_command`: it is the **CLI**, not a JSON endpoint. A raw JSON POST
+to it is silently dropped (`cmdline_ctrl` wants `command=base -c {"T":1,…}` in a
+form field), which is how a previous pass concluded the chassis could not move.
+With the correct form the wheels turn: a 4 s forward command moved the front cone
+459 -> 179 mm and advanced the ESP32 odometry in the commanded direction.

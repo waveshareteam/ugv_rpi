@@ -48,6 +48,9 @@ import cv_ctrl
 import audio_ctrl
 import os_info
 import self_drive
+from perception import sector_min as _sector_min, turn_bias as _turn_bias
+from robot_state import LidarScan
+from spatial_memory import SpatialMemory
 
 # ─────────────────────────────────────────────────────────────────────────────
 # LIDAR Obstacle Avoidance
@@ -79,64 +82,24 @@ MANUAL_PAUSE_SEC = 8.0  # seconds after last joystick input before avoider resum
 LOOP_HZ         = 10
 
 
-def _sector_min(angles_rad, distances_mm, center_deg, half_deg, min_mm=50):
-    """
-    Minimum valid distance (mm) inside an angular sector. inf = no reading.
-    The LD19 lidar stores angles with +180 deg baked in (parse_lidar_frame
-    adds 180°).  We subtract π before comparing so 0 deg = forward.
-    """
-    lo = math.radians(center_deg - half_deg)
-    hi = math.radians(center_deg + half_deg)
-    best = float('inf')
-    for a, d in zip(angles_rad, distances_mm):
-        a = a - math.pi                        # correct +180° hardware offset
-        a = math.atan2(math.sin(a), math.cos(a))  # normalise to [-π, π]
-        if lo <= a <= hi and d >= min_mm and d < best:
-            best = d
-    return best
-
-
-def _turn_bias(angles_rad, distances_mm, half_deg=FRONT_HALF_DEG,
-               danger_mm=LIDAR_TURN_MM, min_mm=50):
-    """
-    Weighted turn direction in [-1, +1].
-    +1 = turn LEFT (away from right-side obstacle).
-    -1 = turn RIGHT (away from left-side obstacle).
-    Applies the same -π correction as _sector_min.
-    """
-    left_w = right_w = 0.0
-    lo = math.radians(-half_deg)
-    hi = math.radians(half_deg)
-    for a, d in zip(angles_rad, distances_mm):
-        a = a - math.pi                        # correct +180° hardware offset
-        a = math.atan2(math.sin(a), math.cos(a))
-        if not (lo <= a <= hi):
-            continue
-        if d < min_mm or d > danger_mm:
-            continue
-        w = (danger_mm - d) / danger_mm
-        if a < 0:
-            right_w += w   # obstacle on right → push left
-        else:
-            left_w  += w   # obstacle on left  → push right
-    total = left_w + right_w
-    if total < 1e-6:
-        return 0.0
-    return float(np.clip((right_w - left_w) / total, -1.0, 1.0))
-
+# Sector/turn helpers live in perception.py (they own the lidar frame
+# convention). Imported above as _sector_min / _turn_bias; the avoider passes
+# its own thresholds in, so the danger distances stay owned by this module.
 
 class LidarAvoider:
     """
     Background thread that reads LIDAR data from base.rl and issues
     differential-drive commands to avoid obstacles.
 
-    States: IDLE → CRUISE → SLOW → EVADE → REVERSE
+    States: IDLE → CRUISE → SLOW → EVADE → REVERSE, plus HOLD while the
+    self-drive planner has asked the executor to stop.
     """
     IDLE    = 'IDLE'
     CRUISE  = 'CRUISE'
     SLOW    = 'SLOW'
     EVADE   = 'EVADE'
     REVERSE = 'REVERSE'
+    HOLD    = 'HOLD'
 
     def __init__(self, base_ctrl):
         self._base      = base_ctrl
@@ -193,10 +156,9 @@ class LidarAvoider:
             t0 = time.time()
             if self._active:
                 try:
-                    angles    = list(self._base.rl.lidar_angles_show)
-                    distances = list(self._base.rl.lidar_distances_show)
-                    if angles:
-                        self._decide(angles, distances)
+                    scan = LidarScan.read(self._base)
+                    if not scan.empty:
+                        self._decide(scan.angles, scan.distances)
                     else:
                         self.state = self.IDLE
                 except Exception as e:
@@ -220,7 +182,7 @@ class LidarAvoider:
         # ── DANGER STOP: reverse then spin ───────────────────────────────
         if front < LIDAR_STOP_MM:
             self.state = self.REVERSE
-            bias = _turn_bias(angles, distances)
+            bias = _turn_bias(angles, distances, FRONT_HALF_DEG, LIDAR_TURN_MM)
             if abs(bias) < 0.15:
                 bias = 1.0 if front_left > front_right else -1.0
             self._last_bias = bias
@@ -228,10 +190,24 @@ class LidarAvoider:
             self._reverse_and_turn(bias, rear)
             return
 
+        # ── PLANNER HALT: no forward motion in ANY state ──────────────────
+        # The planner only suggests headings — halt is the one thing it can
+        # ask the motors to do — but it used to be honored in CRUISE alone,
+        # so once the robot reached its target the 450-700 mm SLOW band (and
+        # the EVADE creep, and the post-evade curve) simply drove it on at
+        # 20-35% speed. Checked here, ahead of every branch that moves the
+        # robot forward. The emergency reverse above is deliberately exempt:
+        # it is the only way out of a jam, and refusing to reverse while
+        # something is 250 mm away is how a robot wedges itself.
+        if self._planner_halted():
+            self.state = self.HOLD
+            self._send(0.0, 0.0)
+            return
+
         # ── DANGER TURN: steer smoothly away ─────────────────────────────
         if front < LIDAR_TURN_MM:
             self.state = self.EVADE
-            bias = _turn_bias(angles, distances)
+            bias = _turn_bias(angles, distances, FRONT_HALF_DEG, LIDAR_TURN_MM)
             if abs(bias) < 0.1:
                 bias = 1.0 if front_left > front_right else -1.0
             self._last_bias = bias
@@ -257,7 +233,11 @@ class LidarAvoider:
         # ── DANGER SLOW: reduce speed with gentle bias ────────────────────
         if front < LIDAR_SLOW_MM:
             self.state = self.SLOW
-            bias  = _turn_bias(angles, distances)
+            # perception.turn_bias takes its thresholds explicitly (they were
+            # defaults on the old in-module copy); the SLOW band must pass the
+            # same ones the old default did or the call raises and no wheel
+            # command is ever sent.
+            bias  = _turn_bias(angles, distances, FRONT_HALF_DEG, LIDAR_TURN_MM)
             self._last_bias = bias
             spd_f = np.clip(
                 (front - LIDAR_TURN_MM) / (LIDAR_SLOW_MM - LIDAR_TURN_MM),
@@ -292,13 +272,24 @@ class LidarAvoider:
             return
         self.state = self.CRUISE
         # Self-drive planner picks the cruise heading (learned memory of walls
-        # + objects, live lidar); the avoider still owns the emergency states.
+        # + objects, live lidar); the avoider still owns the emergency states,
+        # and the planner's halt was already honored above.
         turn = 0.0
         planner = getattr(self, 'planner', None)
         if planner is not None and planner.active:
             turn = planner.suggested_turn
         self._send(CRUISE_SPD * (1.0 - turn),
                    CRUISE_SPD * (1.0 + turn))
+
+    def _planner_halted(self):
+        """Has the self-drive planner asked the executor to stop?
+
+        True only while the planner is actually driving: a paused planner
+        leaves halt set, and the manual driver still needs the wheels.
+        """
+        planner = getattr(self, 'planner', None)
+        return bool(planner is not None and planner.active
+                    and getattr(planner, 'halt', False))
 
     def _sleep_interruptible(self, seconds):
         """Sleep in short slices, aborting early when paused or stopped."""
@@ -382,8 +373,10 @@ cvf = cv_ctrl.OpencvFuncs(thisPath, base)
 avoider = LidarAvoider(base)
 cvf.avoider = avoider  # hand Lance (voice brain) a handle to pause/resume avoidance
 # Self-driving planner: learns surroundings (lidar grid + camera objects) and
-# steers the avoider's cruise toward safe headings. Started paused at boot.
-self_driver = self_drive.SelfDriver(base, cvf, self_drive.SpatialMemory(path=thisPath + '/surroundings.json'))
+# steers the avoider's cruise toward safe headings. Started idle at boot.
+self_driver = self_drive.SelfDriver(
+    base, cvf,
+    memory=SpatialMemory(path=thisPath + '/surroundings.json'))
 avoider.planner = self_driver
 cvf.self_driver = self_driver
 
@@ -937,7 +930,8 @@ def force_reboot():
 def toggle_lidar_avoidance():
     """Enable or disable LIDAR obstacle avoidance from the UI."""
     global _last_manual_cmd_time
-    enable = request.form.get('enable', 'true').lower() == 'true'
+    raw = request.form.get('enable') or request.args.get('enable', 'true')
+    enable = raw.lower() == 'true'
     if enable:
         avoider.resume()
         msg = 'LIDAR avoidance enabled'
@@ -960,17 +954,45 @@ def toggle_selfdrive():
     joystick and the simple LIDAR avoid-on/off toggle.
     Accepts ?enable=true (on) or ?enable=false (off), or form field enable."""
     global _last_manual_cmd_time
-    enable = request.form.get('enable', 'true').lower() == 'true'
+    # Accept the flag from the form body or the query string: a POST to
+    # /selfdrive?enable=false must turn it OFF, not silently default to on.
+    raw = request.form.get('enable') or request.args.get('enable', 'true')
+    enable = raw.lower() == 'true'
+    target = (request.form.get('target') or request.args.get('target') or '').strip()
+    if target:
+        self_driver.pursue(target)   # sets the target and switches driving on
     if enable:
-        self_driver.start()
-        self_driver.resume()
+        self_driver.enable()
         msg = 'Self-drive enabled'
     else:
-        self_driver.pause(save=True)
-        self_driver.stop()
+        self_driver.disable()
         msg = 'Self-drive disabled'
     return jsonify({'status': 'success', 'message': msg,
                     'selfdrive_active': self_driver.active,
+                    'target': self_driver.status().get('target'),
+                    'decision': self_driver.last_decision})
+
+@app.route('/selfdrive_target', methods=['GET', 'POST'])
+def selfdrive_target():
+    """Aim the self-driver at one named object the camera can see.
+
+    POST target=<name> (form or query) pursues it and enables self-drive;
+    POST clear=true drops the target; GET reports the current target state
+    (name, seeking/approaching/arrived, bearing, range, seen).
+    """
+    if request.method == 'GET':
+        return jsonify(self_driver.status().get('target') or {'state': 'idle'})
+    name = (request.form.get('target') or request.args.get('target') or '').strip()
+    clear = (request.form.get('clear') or request.args.get('clear') or '').lower() == 'true'
+    if clear or not name:
+        self_driver.clear_target()
+        return jsonify({'status': 'success', 'message': 'target cleared',
+                        'target': self_driver.status().get('target')})
+    if not self_driver.pursue(name):
+        return jsonify({'status': 'error', 'message': 'target name required'}), 400
+    return jsonify({'status': 'success', 'message': 'pursuing ' + name,
+                    'selfdrive_active': self_driver.active,
+                    'target': self_driver.status().get('target'),
                     'decision': self_driver.last_decision})
 
 # Command-line / socket synonym so the same surface works from every channel.
@@ -997,14 +1019,14 @@ def selfdrive_map():
     """Load / save / clear the learned surroundings."""
     action = request.form.get('action', 'status')
     if action == 'save':
-        ok = self_driver.memory.save()
+        ok = self_driver.save_memory()
         return jsonify({'status': 'success' if ok else 'error',
                         'busy_cells': self_driver.memory.busy_cells})
     if action == 'clear':
-        self_driver.memory.clear()
+        self_driver.clear_memory()
         return jsonify({'status': 'success', 'busy_cells': 0})
     if action == 'load':
-        self_driver.memory._load()
+        self_driver.load_memory()
         return jsonify({'status': 'success',
                         'busy_cells': self_driver.memory.busy_cells,
                         'objects': self_driver.memory.objects[-20:]})
@@ -1016,13 +1038,13 @@ def selfdrive_map():
 
 @app.route('/map_save', methods=['POST'])
 def map_save():
-    ok = self_driver.memory.save()
+    ok = self_driver.save_memory()
     return jsonify({'status': 'success' if ok else 'error',
                     'busy_cells': self_driver.memory.busy_cells})
 
 @app.route('/map_clear', methods=['POST'])
 def map_clear():
-    self_driver.memory.clear()
+    self_driver.clear_memory()
     return jsonify({'status': 'success', 'busy_cells': 0})
 
 @app.route('/api/lance', methods=['POST'])
@@ -1516,7 +1538,7 @@ def manual_control_watchdog():
             if _last_manual_cmd_time > 0 and \
                time.time() - _last_manual_cmd_time > MANUAL_PAUSE_SEC:
                 avoider.resume()
-                self_driver.resume()
+                self_driver.enable()
                 logging.info("[app] Avoidance re-enabled by watchdog")
 
 
@@ -1680,22 +1702,28 @@ def cmdline_ctrl(args_string):
                 cvf.info_update("Avoidance OFF", (0,128,255), 0.36)
 
     elif args[0] == 'selfdrive':
-        # Self-driving planner:  selfdrive on | selfdrive off
+        # Self-driving planner:  selfdrive on | off | target <object> | clear
         if len(args) > 1:
             if args[1] == 'on':
-                self_driver.resume()
+                self_driver.enable()
                 cvf.info_update("Self-drive ON", (0,255,0), 0.36)
             elif args[1] == 'off':
-                self_driver.pause()
+                self_driver.disable()
                 cvf.info_update("Self-drive OFF", (0,128,255), 0.36)
+            elif args[1] == 'target' and len(args) > 2:
+                # Drive toward a named object the camera can see.
+                self_driver.pursue(' '.join(args[2:]))
+                cvf.info_update("Pursuing " + ' '.join(args[2:]), (0,255,0), 0.36)
+            elif args[1] == 'clear':
+                self_driver.clear_target()
 
     elif args[0] == 'map':
         # Learned surroundings:  map save | map clear | map status
         if len(args) > 1:
             if args[1] == 'save':
-                self_driver.memory.save()
+                self_driver.save_memory()
             elif args[1] == 'clear':
-                self_driver.memory.clear()
+                self_driver.clear_memory()
             elif args[1] == 'status':
                 print(json.dumps(self_driver.status()))
 
@@ -1774,8 +1802,7 @@ if __name__ == "__main__":
         # enables it from the UI (or drives manually) - never self-drive at boot.
         avoider.start()
         avoider.pause()
-        self_driver.start()
-        self_driver.pause(save=False)
+        self_driver.warm()
         threading.Thread(target=manual_control_watchdog, daemon=True,
                          name="avoidance-watchdog").start()
         print("[app] LIDAR data stream started (avoidance paused - enable in UI)")

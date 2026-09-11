@@ -1808,6 +1808,37 @@ class OpencvFuncs():
                 parts.append(f"{count} {_pluralize(name)}")
         return counts.most_common(1)[0][0], ", ".join(parts)
 
+    def detect_world(self):
+        """Structured open-vocabulary detections from the newest frame.
+
+        detect_scene() answers Lance in sentences; this returns the same
+        YOLO-World pass as data — [{'name','confidence','box'}] — so the
+        self-drive planner can pursue an object that only the open-vocabulary
+        model knows (the frame loop's last_detections come from the closed-set
+        COCO model, which has no 'refrigerator'/'whiteboard' class at all).
+        """
+        frame = getattr(self, '_latest_raw_frame', None)
+        if frame is None or self.world_model is None \
+                or not getattr(self, 'world_ready', False):
+            return []
+        try:
+            results = self.world_model(frame, verbose=False, conf=WORLD_DETECT_CONF)
+            dets = []
+            for r in results:
+                for box in r.boxes:
+                    cls_id = int(box.cls[0])
+                    raw = self.world_model.names.get(cls_id, '')
+                    name = _SYNONYM_ALIAS_MAP.get(raw, raw)
+                    if not name:
+                        continue
+                    dets.append({'name': name,
+                                 'confidence': float(box.conf[0]),
+                                 'box': list(map(int, box.xyxy[0]))})
+            return dets
+        except Exception as e:
+            logging.error("detect_world error: %s", e)
+            return []
+
     def detect_scene(self):
         """Use the latest captured frame to run open-vocabulary detection.
         Returns a human-readable summary string of what's in front of the camera.
